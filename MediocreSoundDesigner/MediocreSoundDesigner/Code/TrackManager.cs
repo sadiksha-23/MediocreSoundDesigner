@@ -57,37 +57,54 @@ public class TrackManager {
         CombineTracks();
         pseudoCombinedTrack.SaveToFile(filename);
     }
-    public void SaveProject(string filename)
+    private bool SaveCurrentProject(bool saveAs)
     {
-        ProjectData project = new()
-        {
-            DrawTimescale = this.DrawTimescale
-        };
+        string path = currentProjectPath;
 
-        foreach (Track track in Tracks)
+        if (saveAs || path is null)
         {
-            project.Tracks.Add(track.GetProjectData());
+            using SaveFileDialog dialog = new()
+            {
+                Filter = "Sound Designer Project (*.soundproj)|*.soundproj",
+                DefaultExt = "soundproj",
+                AddExtension = true,
+                FileName = path is null ? "" : Path.GetFileName(path)
+            };
+
+            if (dialog.ShowDialog() != DialogResult.OK)
+            {
+                return false;
+            }
+
+            path = dialog.FileName;
         }
-
-        string fullPath = Path.GetFullPath(filename);
-        string tempPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
 
         try
         {
-            using (FileStream stream = new(tempPath, FileMode.CreateNew, FileAccess.Write))
-            {
-                JsonSerializer.Serialize(stream, project);
-            }
-
-            File.Move(tempPath, fullPath, overwrite: true);
+            trackManager.SaveProject(path);
+            currentProjectPath = path;
+            return true;
         }
-        finally
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            if (File.Exists(tempPath))
-            {
-                File.Delete(tempPath);
-            }
+            MessageBox.Show($"Could not save the project:\n{ex.Message}", "Save Project", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
         }
+    }
+
+    public void NewProject()
+    {
+        pseudoCombinedTrack?.Dispose();
+        pseudoCombinedTrack = null;
+
+        foreach (Track track in Tracks)
+        {
+            track.PanDrawSamples?.Dispose();
+            track.Dispose();
+        }
+
+        Tracks.Clear();
+        SelectedTrack = null;
     }
 
     public void LoadProject(string filename)
