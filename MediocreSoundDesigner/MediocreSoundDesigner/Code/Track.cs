@@ -68,7 +68,19 @@ public class Track : IDisposable {
     this.sampleRate = 0;
     IsDisabled = false;
   }
-  public void LinkPanels(Panel panDrawSamples, Panel panContainer) {
+  public Track(TrackData data) : this((float[])data.Samples.Clone()) {
+    sampleRate = data.SampleRate;
+    channels = data.Channels;
+    Volume = data.Volume;
+    DrawOffset = data.DrawOffset;
+    IsDisabled = data.IsDisabled;
+
+    if (sampleRate > 0 && channels > 0)
+    {
+      duration = TimeSpan.FromSeconds((double)samples.Length / sampleRate / channels);
+      }
+    }
+   public void LinkPanels(Panel panDrawSamples, Panel panContainer) {
     this.PanDrawSamples = panDrawSamples;
     this.panContainer = panContainer;
   }
@@ -174,9 +186,19 @@ public class Track : IDisposable {
   public void ToggleDisabled() {
     IsDisabled = !IsDisabled;
   }
-
-  // file i/o
-  private void SaveToTempFile() {
+    public TrackData GetProjectData()
+    {
+        return new TrackData { 
+            Samples = CloneSamples(),
+            SampleRate = sampleRate,
+            Channels = channels,
+            Volume = this.Volume,
+            DrawOffset = this.DrawOffset,
+            IsDisabled = this.IsDisabled
+        };
+    }
+    // file i/o
+    private void SaveToTempFile() {
     Directory.CreateDirectory(Path.GetDirectoryName(tempFilePath));
     using var writer = new WaveFileWriter(tempFilePath, fileReader?.WaveFormat ?? new());
     writer.WriteSamples(GetAdjustedSamples(), 0, samples.Length);

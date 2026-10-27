@@ -1,4 +1,5 @@
 ﻿using NAudio.Wave;
+using System.Text.Json;
 
 namespace MediocreSoundDesigner; 
 
@@ -7,7 +8,7 @@ public class TrackManager {
   private Panel panContainer;
 
   public List<Track> Tracks { get; private set; }
-	public Track SelectedTrack { get; private set; }
+    public Track SelectedTrack { get; private set; }
   public int DrawTimescale { get; set; }
   public PlaybackState State => pseudoCombinedTrack?.State ?? PlaybackState.Stopped;
 
@@ -52,12 +53,89 @@ public class TrackManager {
     RedrawAll();
   }
 
-  public void SaveToFile(string filename) {
-    CombineTracks();
-    pseudoCombinedTrack.SaveToFile(filename);
-  }
+    public void SaveToFile(string filename) {
+        CombineTracks();
+        pseudoCombinedTrack.SaveToFile(filename);
+    }
+    public void SaveProject(string filename)
+    {
+        ProjectData project = new()
+        {
+            DrawTimescale = this.DrawTimescale
+        };
 
-	public void PlayAll() {
+        foreach (Track track in Tracks)
+        {
+            project.Tracks.Add(track.GetProjectData());
+        }
+
+        string fullPath = Path.GetFullPath(filename);
+        string tempPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+
+        try
+        {
+            using (FileStream stream = new(tempPath, FileMode.CreateNew, FileAccess.Write))
+            {
+                JsonSerializer.Serialize(stream, project);
+            }
+
+            File.Move(tempPath, fullPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
+    }
+
+    public void LoadProject(string filename)
+    {
+        ProjectData project;
+
+        using (FileStream stream = File.OpenRead(filename))
+        {
+            project = JsonSerializer.Deserialize<ProjectData>(stream);
+        }
+
+        if (project is null || project.Version != 1 || project.Tracks is null || project.DrawTimescale <= 0)
+        {
+            throw new InvalidDataException("This project file is invalid or unsupported.");
+        }
+
+        List<Track> loadedTracks = new();
+
+        foreach (TrackData data in project.Tracks)
+        {
+            if (data is null || data.Samples is null || data.SampleRate < 0 || data.Channels <= 0 || data.DrawOffset < 0 || !float.IsFinite(data.Volume) || data.Volume < 0)
+            {
+                throw new InvalidDataException("The project contains invalid track settings.");
+            }
+
+            if (data.Samples.Length % data.Channels != 0 || data.Samples.Any(sample => !float.IsFinite(sample)))
+            {
+                throw new InvalidDataException("The project contains invalid audio data.");
+            }
+
+            loadedTracks.Add(new Track(data));
+        }
+
+        // Replace the current project only after reading and checking the new one.
+        pseudoCombinedTrack?.Dispose();
+        pseudoCombinedTrack = null;
+
+        foreach (Track track in Tracks)
+        {
+            track.PanDrawSamples?.Dispose();
+            track.Dispose();
+        }
+
+        Tracks = loadedTracks;
+        SelectedTrack = null;
+        DrawTimescale = project.DrawTimescale;
+    }
+    public void PlayAll() {
     CombineTracks();
     pseudoCombinedTrack.Play();
   }
