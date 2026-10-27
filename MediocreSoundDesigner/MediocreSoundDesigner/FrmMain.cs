@@ -83,13 +83,41 @@ public partial class FrmMain : Form {
       newTrack.PanDrawSamples.Invalidate();
     }
   }
-  private void menuFileSave_Click(object sender, EventArgs e) {
-    sfdSaveFile.DefaultExt = "wav";
-    if (sfdSaveFile.ShowDialog() == DialogResult.OK) {
-      trackManager.SaveToFile(sfdSaveFile.FileName);
+    private void menuFileSave_Click(object sender, EventArgs e) {
+        if (trackManager.Tracks.Count == 0 || trackManager.Tracks.All(t => t.IsDisabled)) {
+            MessageBox.Show("There are no enabled tracks to export.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        sfdSaveFile.Filter = "WAV Audio (*.wav)|*.wav|MP3 Audio (*.mp3)|*.mp3";
+        sfdSaveFile.DefaultExt = "wav";
+        sfdSaveFile.AddExtension = true;
+        if (sfdSaveFile.ShowDialog() != DialogResult.OK) {
+            return;
+        }
+
+        string ext = sfdSaveFile.FilterIndex == 2 ? ".mp3" : ".wav";
+        string path = sfdSaveFile.FileName;
+        string current = Path.GetExtension(path);
+        if (current.Equals(".wav", StringComparison.OrdinalIgnoreCase) || current.Equals(".mp3", StringComparison.OrdinalIgnoreCase)){
+            path = Path.ChangeExtension(path, ext);
+        }
+        else if (!path.EndsWith(ext, StringComparison.OrdinalIgnoreCase)) {
+            path += ext;
+        }
+
+        try {
+            Cursor = Cursors.WaitCursor;
+            trackManager.SaveToFile(path);
+        }
+        catch (Exception ex) {
+            MessageBox.Show($"Could not export the file:\n{ex.Message}", "Export", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally {
+            Cursor = Cursors.Default;
+        }
     }
-  }
-  private void menuFileSettings_Click(object sender, EventArgs e) {
+    private void menuFileSettings_Click(object sender, EventArgs e) {
     FrmEditSettings frm = new();
     frm.SetSound(trackManager.SelectedTrack);
     if (frm.ShowDialog() == DialogResult.OK) {
@@ -216,7 +244,8 @@ public partial class FrmMain : Form {
   }
 
   private void UpdateSizes() {
-    const int PADDING = 15;
+        if (trackManager is null) return;
+        const int PADDING = 15;
 
     panTracks.Left = PADDING;
     panTracks.Width = ClientSize.Width - (PADDING * 2);
