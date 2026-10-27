@@ -1,110 +1,104 @@
 ﻿using NAudio.Wave;
 using System.Text.Json;
 
-namespace MediocreSoundDesigner; 
+namespace MediocreSoundDesigner;
 
-public class TrackManager {
-  private Track pseudoCombinedTrack;
-  private Panel panContainer;
+public class TrackManager
+{
+    private Track pseudoCombinedTrack;
+    private Panel panContainer;
 
-  public List<Track> Tracks { get; private set; }
+    public List<Track> Tracks { get; private set; }
     public Track SelectedTrack { get; private set; }
-  public int DrawTimescale { get; set; }
-  public PlaybackState State => pseudoCombinedTrack?.State ?? PlaybackState.Stopped;
+    public int DrawTimescale { get; set; }
+    public PlaybackState State => pseudoCombinedTrack?.State ?? PlaybackState.Stopped;
 
-  public TrackManager(Panel panContainer) {
-		Tracks = new();
-    SelectedTrack = null;
-    pseudoCombinedTrack = null;
-    this.panContainer = panContainer;
-  }
-
-	public void AddTrack(Track track) {
-		Tracks.Add(track);
-	}
-
-	public void RemTrack(Track track) {
-		Tracks.Remove(track);
-	}
-
-	public void SelectTrack(Track track) {
-		SelectedTrack = track;
-    Tracks.ForEach(track => {
-      track.PanDrawSamples.BorderStyle = BorderStyle.None;
-      track.PanDrawSamples.BackColor = Settings.Color.TrackBg_Unselected;
-    });
-    track.PanDrawSamples.BorderStyle = BorderStyle.Fixed3D;
-    track.PanDrawSamples.BackColor = Settings.Color.TrackBg_Selected;
-  }
-
-  public void RedrawAll() {
-    Tracks.ForEach(track => track.PanDrawSamples.Invalidate());
-  }
-
-  public void ApplySettings() {
-    foreach (Track track in Tracks) {
-      if (SelectedTrack == track) {
-        track.PanDrawSamples.BackColor = Settings.Color.TrackBg_Selected;
-      }
-      else {
-        track.PanDrawSamples.BackColor = Settings.Color.TrackBg_Unselected;
-      }
+    public TrackManager(Panel panContainer)
+    {
+        Tracks = new();
+        SelectedTrack = null;
+        pseudoCombinedTrack = null;
+        this.panContainer = panContainer;
     }
-    RedrawAll();
-  }
 
-    public void SaveToFile(string filename) {
+    public void AddTrack(Track track)
+    {
+        Tracks.Add(track);
+    }
+
+    public void RemTrack(Track track)
+    {
+        Tracks.Remove(track);
+    }
+
+    public void SelectTrack(Track track)
+    {
+        SelectedTrack = track;
+        Tracks.ForEach(track => {
+            track.PanDrawSamples.BorderStyle = BorderStyle.None;
+            track.PanDrawSamples.BackColor = Settings.Color.TrackBg_Unselected;
+        });
+        track.PanDrawSamples.BorderStyle = BorderStyle.Fixed3D;
+        track.PanDrawSamples.BackColor = Settings.Color.TrackBg_Selected;
+    }
+
+    public void RedrawAll()
+    {
+        Tracks.ForEach(track => track.PanDrawSamples.Invalidate());
+    }
+
+    public void ApplySettings()
+    {
+        foreach (Track track in Tracks)
+        {
+            if (SelectedTrack == track)
+            {
+                track.PanDrawSamples.BackColor = Settings.Color.TrackBg_Selected;
+            }
+            else
+            {
+                track.PanDrawSamples.BackColor = Settings.Color.TrackBg_Unselected;
+            }
+        }
+        RedrawAll();
+    }
+
+    public void SaveToFile(string filename)
+    {
         CombineTracks();
         pseudoCombinedTrack.SaveToFile(filename);
     }
-    private bool SaveCurrentProject(bool saveAs)
+    public void SaveProject(string filename)
     {
-        string path = currentProjectPath;
-
-        if (saveAs || path is null)
+        ProjectData project = new()
         {
-            using SaveFileDialog dialog = new()
-            {
-                Filter = "Sound Designer Project (*.soundproj)|*.soundproj",
-                DefaultExt = "soundproj",
-                AddExtension = true,
-                FileName = path is null ? "" : Path.GetFileName(path)
-            };
-
-            if (dialog.ShowDialog() != DialogResult.OK)
-            {
-                return false;
-            }
-
-            path = dialog.FileName;
-        }
-
-        try
-        {
-            trackManager.SaveProject(path);
-            currentProjectPath = path;
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            MessageBox.Show($"Could not save the project:\n{ex.Message}", "Save Project", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return false;
-        }
-    }
-
-    public void NewProject()
-    {
-        pseudoCombinedTrack?.Dispose();
-        pseudoCombinedTrack = null;
+            DrawTimescale = this.DrawTimescale
+        };
 
         foreach (Track track in Tracks)
         {
-            track.PanDrawSamples?.Dispose();
-            track.Dispose();
+            project.Tracks.Add(track.GetProjectData());
         }
 
-        Tracks.Clear();
-        SelectedTrack = null;
+        string fullPath = Path.GetFullPath(filename);
+        string tempPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+
+        try
+        {
+            using (FileStream stream = new(tempPath, FileMode.CreateNew, FileAccess.Write))
+            {
+                JsonSerializer.Serialize(stream, project);
+            }
+
+            File.Move(tempPath, fullPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
     }
 
     public void LoadProject(string filename)
@@ -152,32 +146,54 @@ public class TrackManager {
         SelectedTrack = null;
         DrawTimescale = project.DrawTimescale;
     }
-    public void PlayAll() {
-    CombineTracks();
-    pseudoCombinedTrack.Play();
-  }
-  private void CombineTracks() {
-    pseudoCombinedTrack?.Dispose();
-    List<float> combinedSamples = new();
-    foreach (Track track in Tracks) {
-      if (track.IsDisabled) {
-        continue;
-      }
-      float[] trackSamples = (float[])track.GetAdjustedSamples().Clone();
-      for (int i = 0; i < trackSamples.Length; i++) {
-        if (combinedSamples.Count <= i) {
-          combinedSamples.Add(0);
+    public void NewProject()
+    {
+        pseudoCombinedTrack?.Dispose();
+        pseudoCombinedTrack = null;
+
+        foreach (Track track in Tracks)
+        {
+            track.PanDrawSamples?.Dispose();
+            track.Dispose();
         }
-        combinedSamples[i] += trackSamples[i];
-      }
+
+        Tracks.Clear();
+        SelectedTrack = null;
     }
-    pseudoCombinedTrack = new(combinedSamples.ToArray());
-    pseudoCombinedTrack.LinkPanels(null, panContainer);
-  }
-  public void PauseAll() {
-    pseudoCombinedTrack?.Pause();
-  }
-  public int GetPlayheadPos() {
-    return (pseudoCombinedTrack?.GetPlayheadPos() ?? 0) / DrawTimescale;
-  }
+    public void PlayAll()
+    {
+        CombineTracks();
+        pseudoCombinedTrack.Play();
+    }
+    private void CombineTracks()
+    {
+        pseudoCombinedTrack?.Dispose();
+        List<float> combinedSamples = new();
+        foreach (Track track in Tracks)
+        {
+            if (track.IsDisabled)
+            {
+                continue;
+            }
+            float[] trackSamples = (float[])track.GetAdjustedSamples().Clone();
+            for (int i = 0; i < trackSamples.Length; i++)
+            {
+                if (combinedSamples.Count <= i)
+                {
+                    combinedSamples.Add(0);
+                }
+                combinedSamples[i] += trackSamples[i];
+            }
+        }
+        pseudoCombinedTrack = new(combinedSamples.ToArray());
+        pseudoCombinedTrack.LinkPanels(null, panContainer);
+    }
+    public void PauseAll()
+    {
+        pseudoCombinedTrack?.Pause();
+    }
+    public int GetPlayheadPos()
+    {
+        return (pseudoCombinedTrack?.GetPlayheadPos() ?? 0) / DrawTimescale;
+    }
 }

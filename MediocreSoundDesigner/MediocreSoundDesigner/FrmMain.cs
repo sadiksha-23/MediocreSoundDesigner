@@ -70,7 +70,7 @@ public partial class FrmMain : Form
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
-    private void SaveCurrentProject(bool saveAs)
+    private bool SaveCurrentProject(bool saveAs)
     {
         string path = currentProjectPath;
 
@@ -86,7 +86,7 @@ public partial class FrmMain : Form
 
             if (dialog.ShowDialog() != DialogResult.OK)
             {
-                return;
+                return false;
             }
 
             path = dialog.FileName;
@@ -96,10 +96,12 @@ public partial class FrmMain : Form
         {
             trackManager.SaveProject(path);
             currentProjectPath = path;
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
             MessageBox.Show($"Could not save the project:\n{ex.Message}", "Save Project", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
         }
     }
 
