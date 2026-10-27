@@ -205,8 +205,27 @@ public partial class FrmMain : Form {
       track.ToggleDisabled();
       track.PanDrawSamples.Invalidate();
     };
+    ContextMenuStrip colorMenu = new()
+    {
+      ShowImageMargin = false
+    };
+    colorMenu.Items.Add("Change track color...", null, (sender, e) => {
+      trackManager.SelectTrack(track);
+      using ColorDialog dialog = new()
+      {
+        Color = track.TrackColor,
+        FullOpen = true
+      };
+
+      if (dialog.ShowDialog(this) == DialogResult.OK)
+      {
+        track.SetTrackColor(dialog.Color);
+      }
+    });
+    pan.ContextMenuStrip = colorMenu;
+    pan.Disposed += (sender, e) => colorMenu.Dispose();
     pan.Paint += (sender, e) => {
-      track.DrawSamples(e.Graphics, trackManager.DrawTimescale);
+    track.DrawSamples(e.Graphics, trackManager.DrawTimescale);
     };
     panTracks.Controls.Add(pan);
     track.LinkPanels(pan, panTracks);
@@ -216,7 +235,8 @@ public partial class FrmMain : Form {
   }
 
   private void UpdateSizes() {
-    const int PADDING = 15;
+        if (trackManager is null) { return; }
+        const int PADDING = 15;
 
     panTracks.Left = PADDING;
     panTracks.Width = ClientSize.Width - (PADDING * 2);

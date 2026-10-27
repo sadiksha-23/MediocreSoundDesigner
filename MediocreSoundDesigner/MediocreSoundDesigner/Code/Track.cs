@@ -30,7 +30,10 @@ public class Track : IDisposable {
   public bool IsDisabled { get; private set; }
   public Panel PanDrawSamples { get; private set; }
   public float Volume { get; private set; }
-  private string tempFilePath => Path.Combine(Path.GetTempPath(), "MediocreSoundDesigner", "temp.wav");
+    public System.Drawing.Color TrackColor { get; private set; } = System.Drawing.Color.Empty;
+
+    public string DisplayName { get; private set; }
+    private string tempFilePath => Path.Combine(Path.GetTempPath(), "MediocreSoundDesigner", "temp.wav");
   public PlaybackState State => outputDevice?.PlaybackState ?? PlaybackState.Stopped;
 
   // ctor
@@ -44,6 +47,7 @@ public class Track : IDisposable {
     }
 
     this.file = file;
+    DisplayName = Path.GetFileNameWithoutExtension(file);
     this.duration = fileReader.TotalTime;
     this.offset = 0;
     this.timeScale = 1.0f;
@@ -58,6 +62,7 @@ public class Track : IDisposable {
     this.samples = samples;
 
     this.file = "";
+        DisplayName = "Generated Track";
     this.duration = TimeSpan.Zero;
     this.offset = 0;
     this.timeScale = 1.0f;
@@ -99,7 +104,17 @@ public class Track : IDisposable {
   public void SetVolume(float newVolume) {
     Volume = newVolume;
   }
-  public void EliminateSilence(SampleRegion region, float minDuration, float thres) {
+
+    public void SetTrackColor(System.Drawing.Color color)
+    {
+        TrackColor = color;
+
+        if (PanDrawSamples is not null) {
+            PanDrawSamples.BackColor = color;
+            PanDrawSamples.Invalidate();
+        }
+    }
+    public void EliminateSilence(SampleRegion region, float minDuration, float thres) {
     float[] newSamples = CloneSamples();
     if (region is SampleRegion.BEGINNING_ONLY or SampleRegion.BEGINNING_AND_END) {
       int silentDurationInNumSamples = 0;
@@ -224,6 +239,20 @@ public class Track : IDisposable {
       g.DrawLines(pen, points.ToArray());
       pen.Dispose();
     }
+    System.Drawing.Color trackColor = PanDrawSamples.BackColor;
+    System.Drawing.Color headerColor = System.Drawing.Color.FromArgb(
+      (int)(trackColor.R * 0.90),
+      (int)(trackColor.G * 0.90),
+      (int)(trackColor.B * 0.90)
+    );
+    using SolidBrush headerBrush = new(headerColor);
+    g.FillRectangle(headerBrush, 0, 0, PanDrawSamples.Width, 30);
+
+    using Pen divider = new(System.Drawing.Color.FromArgb(70, 0, 0, 0));
+    g.DrawLine(divider, 0, 29, PanDrawSamples.Width, 29);
+
+    using System.Drawing.Font nameFont = new("Arial", 10f, System.Drawing.FontStyle.Bold);
+    TextRenderer.DrawText(g, DisplayName, nameFont, new Rectangle(10, 0, Math.Max(0, PanDrawSamples.Width - 20), 30), System.Drawing.Color.Black, TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
   }
 
   // dispose
