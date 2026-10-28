@@ -181,6 +181,11 @@ public class Track : IDisposable {
   public void Pause() {
     outputDevice?.Pause();
   }
+
+  public void Resume()
+  {
+    outputDevice?.Play();
+  }
   public void Reset() {
   }
   public int GetPlayheadPos() {

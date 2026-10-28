@@ -85,6 +85,17 @@ public class TrackManager {
   public void PauseAll() {
     pseudoCombinedTrack?.Pause();
   }
+
+  public void ResetAll()
+  {
+    pseudoCombinedTrack?.Dispose();
+    pseudoCombinedTrack = null;
+  }
+
+  public void ResumeAll()
+  {
+    pseudoCombinedTrack?.Resume();
+  }
   public int GetPlayheadPos() {
     return (pseudoCombinedTrack?.GetPlayheadPos() ?? 0) / DrawTimescale;
   }
