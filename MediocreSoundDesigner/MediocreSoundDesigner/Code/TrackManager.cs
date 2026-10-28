@@ -1,107 +1,134 @@
-﻿using NAudio.Wave;
+﻿using MediocreSoundDesigner;
+using NAudio.Wave;
 
-namespace MediocreSoundDesigner;
-
-public class TrackManager {
+public class TrackManager
+{
   private Track pseudoCombinedTrack;
   private Panel panContainer;
   private int nextTrackColorIndex = 0;
+
   public List<Track> Tracks { get; private set; }
-	public Track SelectedTrack { get; private set; }
+  public Track SelectedTrack { get; private set; }
   public int DrawTimescale { get; set; }
   public PlaybackState State => pseudoCombinedTrack?.State ?? PlaybackState.Stopped;
 
-  public TrackManager(Panel panContainer) {
-		Tracks = new();
+  public TrackManager(Panel panContainer)
+  {
+    Tracks = new();
     SelectedTrack = null;
     pseudoCombinedTrack = null;
     this.panContainer = panContainer;
   }
-  public void AddTrack(Track track) {
-    if (track.TrackColor.IsEmpty){
-       int index = nextTrackColorIndex % Settings.DefaultTrackColors.Length;
-       track.SetTrackColor(Settings.DefaultTrackColors[index]);
+
+  public void AddTrack(Track track)
+  {
+    if (track.TrackColor.IsEmpty)
+    {
+      int index = nextTrackColorIndex % Settings.DefaultTrackColors.Length;
+      track.SetTrackColor(Settings.DefaultTrackColors[index]);
     }
 
     nextTrackColorIndex++;
     Tracks.Add(track);
   }
-  public void RemTrack(Track track) {
-		Tracks.Remove(track);
-	}
 
-    public void SelectTrack(Track track) {
-        SelectedTrack = track;
+  public void RemTrack(Track track)
+  {
+    Tracks.Remove(track);
+  }
 
-        foreach (Track other in Tracks) {
-            other.PanDrawSamples.BorderStyle = BorderStyle.None;
-            other.PanDrawSamples.BackColor = other.TrackColor.IsEmpty ? Settings.Color.TrackBg_Unselected : other.TrackColor;
-        }
+  public void SelectTrack(Track track)
+  {
+    SelectedTrack = track;
 
-        track.PanDrawSamples.BorderStyle = BorderStyle.Fixed3D;
-        track.PanDrawSamples.BackColor = track.TrackColor.IsEmpty ? Settings.Color.TrackBg_Selected : track.TrackColor;
+    foreach (Track other in Tracks)
+    {
+      other.PanDrawSamples.BorderStyle = BorderStyle.None;
+      other.PanDrawSamples.BackColor = other.TrackColor.IsEmpty
+        ? Settings.Color.TrackBg_Unselected
+        : other.TrackColor;
     }
 
-    public void RedrawAll() {
+    track.PanDrawSamples.BorderStyle = BorderStyle.Fixed3D;
+    track.PanDrawSamples.BackColor = track.TrackColor.IsEmpty
+      ? Settings.Color.TrackBg_Selected
+      : track.TrackColor;
+  }
+
+  public void RedrawAll()
+  {
     Tracks.ForEach(track => track.PanDrawSamples.Invalidate());
   }
 
-    public void ApplySettings() {
-        foreach (Track track in Tracks)
-        {
-            track.PanDrawSamples.BackColor = track.TrackColor.IsEmpty ? Settings.Color.TrackBg_Unselected : track.TrackColor;
-        }
-
-        RedrawAll();
+  public void ApplySettings()
+  {
+    foreach (Track track in Tracks)
+    {
+      track.PanDrawSamples.BackColor = track.TrackColor.IsEmpty
+        ? Settings.Color.TrackBg_Unselected
+        : track.TrackColor;
     }
 
-    public void SaveToFile(string filename) {
+    RedrawAll();
+  }
+
+  public void SaveToFile(string filename)
+  {
     CombineTracks();
     pseudoCombinedTrack.SaveToFile(filename);
   }
 
-    public void PlayAll()
+  public void PlayAll()
+  {
+    CombineTracks();
+    pseudoCombinedTrack.Play();
+  }
+
+  private void CombineTracks()
+  {
+    pseudoCombinedTrack?.Dispose();
+
+    List<float> combinedSamples = new();
+
+    foreach (Track track in Tracks)
     {
-        CombineTracks();
-        pseudoCombinedTrack.Play();
-    }
-    private void CombineTracks()
-    {
-        pseudoCombinedTrack?.Dispose();
-        List<float> combinedSamples = new();
-        foreach (Track track in Tracks)
+      if (track.IsDisabled)
+      {
+        continue;
+      }
+
+      float[] trackSamples = track.GetAdjustedSamples();
+
+      for (int i = 0; i < trackSamples.Length; i++)
+      {
+        if (combinedSamples.Count <= i)
         {
-            if (track.IsDisabled)
-            {
-                continue;
-            }
-            float[] trackSamples = (float[])track.GetAdjustedSamples().Clone();
-            for (int i = 0; i < trackSamples.Length; i++)
-            {
-                if (combinedSamples.Count <= i)
-                {
-                    combinedSamples.Add(0);
-                }
-                combinedSamples[i] += trackSamples[i];
-            }
+          combinedSamples.Add(0);
         }
-        Track first = Tracks.FirstOrDefault(t => !t.IsDisabled);
-        float[] mixed = combinedSamples.Select(s => Math.Clamp(s, -1f, 1f)).ToArray();
-        pseudoCombinedTrack = first is null ? new(mixed) : new(mixed, first.Format);
-        pseudoCombinedTrack.LinkPanels(null, panContainer);
+
+        combinedSamples[i] += trackSamples[i];
+      }
     }
-    public void PauseAll()
+
+    Track first = Tracks.FirstOrDefault(track => !track.IsDisabled);
+    float[] mixed = combinedSamples
+      .Select(sample => Math.Clamp(sample, -1f, 1f))
+      .ToArray();
+
+    if (first is null)
     {
-        pseudoCombinedTrack?.Pause();
+      pseudoCombinedTrack = new Track(mixed);
     }
-    public int GetPlayheadPos()
+    else
     {
-        return (pseudoCombinedTrack?.GetPlayheadPos() ?? 0) / DrawTimescale;
+      pseudoCombinedTrack = new Track(mixed, first.Format);
     }
-    pseudoCombinedTrack = new(combinedSamples.ToArray());
+
     pseudoCombinedTrack.LinkPanels(null, panContainer);
   }
-  public void PauseAll() {
+
+  public void PauseAll()
+  {
     pseudoCombinedTrack?.Pause();
   }
 
@@ -115,7 +142,9 @@ public class TrackManager {
   {
     pseudoCombinedTrack?.Resume();
   }
-  public int GetPlayheadPos() {
+
+  public int GetPlayheadPos()
+  {
     return (pseudoCombinedTrack?.GetPlayheadPos() ?? 0) / DrawTimescale;
   }
 }
