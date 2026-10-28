@@ -30,14 +30,16 @@ public class Track : IDisposable
     private int drawTimescale;
     private WaveFormat overrideFormat;
 
-    // properties
+   // properties
     public int DrawOffset { get; set; }
     public bool IsDisabled { get; private set; }
     public Panel PanDrawSamples { get; private set; }
     public float Volume { get; private set; }
+    public System.Drawing.Color TrackColor { get; private set; } = System.Drawing.Color.Empty;
+    public string DisplayName { get; private set; }
     private string tempFilePath => Path.Combine(Path.GetTempPath(), "MediocreSoundDesigner", "temp.wav");
     public PlaybackState State => outputDevice?.PlaybackState ?? PlaybackState.Stopped;
-    public WaveFormat Format => fileReader?.WaveFormat ?? overrideFormat ?? new WaveFormat();
+    public WaveFormat Format => fileReader?.WaveFormat ?? overrideFormat ?? new WaveFormat(); 
 
     // ctor
     public Track(string file)
@@ -51,77 +53,85 @@ public class Track : IDisposable
             Array.Resize(ref samples, samplesRead);
         }
 
-        this.file = file;
-        this.duration = fileReader.TotalTime;
-        this.offset = 0;
-        this.timeScale = 1.0f;
-        this.Volume = 1.0f;
-        this.pitch = 1.0f;
-        this.bits = fileReader.WaveFormat.BitsPerSample;
-        this.channels = fileReader.WaveFormat.Channels;
-        this.sampleRate = fileReader.WaveFormat.SampleRate;
-        IsDisabled = false;
-    }
-    public Track(float[] samples)
-    {
-        this.samples = samples;
+  this.file = file;
+  DisplayName = Path.GetFileNameWithoutExtension(file);
+  this.duration = fileReader.TotalTime;
+  this.offset = 0;
+  this.timeScale = 1.0f;
+  Volume = 1.0f;
+  this.pitch = 1.0f;
+  this.bits = fileReader.WaveFormat.BitsPerSample;
+  this.channels = fileReader.WaveFormat.Channels;
+  this.sampleRate = fileReader.WaveFormat.SampleRate;
+  IsDisabled = false;
+  }
 
-        this.file = "";
-        this.duration = TimeSpan.Zero;
-        this.offset = 0;
-        this.timeScale = 1.0f;
-        this.Volume = 1.0f;
-        this.pitch = 1.0f;
-        this.bits = 32;
-        this.channels = 1;
-        this.sampleRate = 0;
-        IsDisabled = false;
-    }
-    public Track(float[] samples, WaveFormat format) : this(samples)
-    {
-        overrideFormat = format;
-    }
-    public void LinkPanels(Panel panDrawSamples, Panel panContainer)
-    {
-        this.PanDrawSamples = panDrawSamples;
-        this.panContainer = panContainer;
-    }
+  public Track(float[] samples) {
+    this.samples = samples;
+    this.file = "";
+    DisplayName = "Generated Track";
+    this.duration = TimeSpan.Zero;
+    this.offset = 0;
+    this.timeScale = 1.0f;
+    Volume = 1.0f;
+    this.pitch = 1.0f;
+    this.bits = 32;
+    this.channels = 1;
+    this.sampleRate = 0;
+    IsDisabled = false;
+  }
 
-    // edits
-    public float[] CloneSamples()
-    {
-        return (float[])samples.Clone();
+  public Track(float[] samples, WaveFormat format) : this(samples) {
+    overrideFormat = format;
+  }
+
+  public void LinkPanels(Panel panDrawSamples, Panel panContainer) {
+    this.PanDrawSamples = panDrawSamples;
+    this.panContainer = panContainer;
+  }
+
+  // edits
+  public float[] CloneSamples() {
+    return (float[])samples.Clone();
+  }
+
+  public void ReplaceSamples(float[] samples) {
+    this.samples = samples;
+  }
+
+  public void Reverse() {
+    for (int i = 0; i < samples.Length / 2; i++) {
+      var temp = samples[i];
+      samples[i] = samples[samples.Length - 1 - i];
+      samples[samples.Length - 1 - i] = temp;
     }
-    public void ReplaceSamples(float[] samples)
-    {
-        this.samples = samples;
+  }
+
+  public void Flip() {
+    for (int i = 0; i < samples.Length; i++) {
+      samples[i] *= -1;
     }
-    public void Reverse()
-    {
-        for (int i = 0; i < samples.Length / 2; i++)
-        {
-            var temp = samples[i];
-            samples[i] = samples[samples.Length - 1 - i];
-            samples[samples.Length - 1 - i] = temp;
-        }
+  }
+
+  public void Trim() {
+  }
+
+  public void AlterTimeScale(float scale) {
+  }
+
+  public void SetVolume(float newVolume) {
+    Volume = newVolume;
+  }
+
+  public void SetTrackColor(System.Drawing.Color color) {
+    TrackColor = color;
+
+    if (PanDrawSamples is not null) {
+      PanDrawSamples.BackColor = color;
+      PanDrawSamples.Invalidate();
     }
-    public void Flip()
-    {
-        for (int i = 0; i < samples.Length; i++)
-        {
-            samples[i] *= -1;
-        }
-    }
-    public void Trim()
-    {
-    }
-    public void AlterTimeScale(float scale)
-    {
-    }
-    public void SetVolume(float newVolume)
-    {
-        Volume = newVolume;
-    }
+  } 
+    
     public void EliminateSilence(SampleRegion region, float minDuration, float thres)
     {
         float[] newSamples = CloneSamples();
@@ -193,32 +203,32 @@ public class Track : IDisposable
         samples = newSamples;
     }
 
-    // play
-    public void Play()
-    {
-        outputDevice?.Dispose();
-        fileReader?.Dispose();
-        SaveToTempFile();
-        fileReader = new AudioFileReader(tempFilePath);
-        outputDevice = new WaveOut();
-        outputDevice.Init(fileReader);
-        outputDevice.Play();
-    }
-    public void Pause()
-    {
-        outputDevice?.Pause();
-    }
-    public void Reset()
-    {
-    }
-    public int GetPlayheadPos()
-    {
-        return (int)((outputDevice?.GetPosition() ?? 0) / 4);
-    }
-    public void ToggleDisabled()
-    {
-        IsDisabled = !IsDisabled;
-    }
+  // play
+  public void Play() {
+    outputDevice?.Dispose();
+    fileReader?.Dispose();
+    SaveToTempFile();
+    fileReader = new AudioFileReader(tempFilePath);
+    outputDevice = new WaveOut();
+    outputDevice.Init(fileReader);
+    outputDevice.Play();
+  }
+  public void Pause() {
+    outputDevice?.Pause();
+  }
+
+  public void Resume()
+  {
+    outputDevice?.Play();
+  }
+  public void Reset() {
+  }
+  public int GetPlayheadPos() {
+    return (int)((outputDevice?.GetPosition() ?? 0) / 4);
+  }
+  public void ToggleDisabled() {
+    IsDisabled = !IsDisabled;
+  }
 
     // file i/o
     private void SaveToTempFile()
@@ -300,24 +310,36 @@ public class Track : IDisposable
             return;
         }
 
-        this.drawTimescale = drawTimescale;
-        float heightAdj = PanDrawSamples.Height / 2;
-        if (samples != null && samples.Length > 0)
-        {
-            int x = DrawOffset;
-            Pen pen = new(IsDisabled ? Settings.Color.TrackSamples_Disabled : Settings.Color.TrackSamples_Enabled);
-            List<Point> points = new();
-            for (int s = 0; s < samples.Length; s += drawTimescale)
-            {
-                var sample = (int)(samples[s] * heightAdj * Volume);
-                points.Add(new(x, PanDrawSamples.Height / 2));
-                points.Add(new(x, PanDrawSamples.Height / 2 - sample));
-                x++;
-            }
-            g.DrawLines(pen, points.ToArray());
-            pen.Dispose();
-        }
+    this.drawTimescale = drawTimescale;
+    float heightAdj = PanDrawSamples.Height / 2;
+    if (samples != null && samples.Length > 0) {
+      int x = DrawOffset;
+      Pen pen = new(IsDisabled ? Settings.Color.TrackSamples_Disabled : Settings.Color.TrackSamples_Enabled);
+      List<Point> points = new();
+      for (int s = 0; s < samples.Length; s += drawTimescale) {
+        var sample = (int)(samples[s] * heightAdj * Volume);
+        points.Add(new(x, PanDrawSamples.Height / 2));
+        points.Add(new(x, PanDrawSamples.Height / 2 - sample));
+        x++;
+      }
+      g.DrawLines(pen, points.ToArray());
+      pen.Dispose();
     }
+    System.Drawing.Color trackColor = PanDrawSamples.BackColor;
+    System.Drawing.Color headerColor = System.Drawing.Color.FromArgb(
+      (int)(trackColor.R * 0.90),
+      (int)(trackColor.G * 0.90),
+      (int)(trackColor.B * 0.90)
+    );
+    using SolidBrush headerBrush = new(headerColor);
+    g.FillRectangle(headerBrush, 0, 0, PanDrawSamples.Width, 30);
+
+    using Pen divider = new(System.Drawing.Color.FromArgb(70, 0, 0, 0));
+    g.DrawLine(divider, 0, 29, PanDrawSamples.Width, 29);
+
+    using System.Drawing.Font nameFont = new("Arial", 10f, System.Drawing.FontStyle.Bold);
+    TextRenderer.DrawText(g, DisplayName, nameFont, new Rectangle(10, 0, Math.Max(0, PanDrawSamples.Width - 20), 30), System.Drawing.Color.Black, TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+  }
 
     // dispose
     public void Dispose()

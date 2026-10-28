@@ -2,71 +2,63 @@
 
 namespace MediocreSoundDesigner;
 
-public class TrackManager
-{
-    private Track pseudoCombinedTrack;
-    private Panel panContainer;
+public class TrackManager {
+  private Track pseudoCombinedTrack;
+  private Panel panContainer;
+  private int nextTrackColorIndex = 0;
+  public List<Track> Tracks { get; private set; }
+	public Track SelectedTrack { get; private set; }
+  public int DrawTimescale { get; set; }
+  public PlaybackState State => pseudoCombinedTrack?.State ?? PlaybackState.Stopped;
 
-    public List<Track> Tracks { get; private set; }
-    public Track SelectedTrack { get; private set; }
-    public int DrawTimescale { get; set; }
-    public PlaybackState State => pseudoCombinedTrack?.State ?? PlaybackState.Stopped;
-
-    public TrackManager(Panel panContainer)
-    {
-        Tracks = new();
-        SelectedTrack = null;
-        pseudoCombinedTrack = null;
-        this.panContainer = panContainer;
+  public TrackManager(Panel panContainer) {
+		Tracks = new();
+    SelectedTrack = null;
+    pseudoCombinedTrack = null;
+    this.panContainer = panContainer;
+  }
+  public void AddTrack(Track track) {
+    if (track.TrackColor.IsEmpty){
+       int index = nextTrackColorIndex % Settings.DefaultTrackColors.Length;
+       track.SetTrackColor(Settings.DefaultTrackColors[index]);
     }
 
-    public void AddTrack(Track track)
-    {
-        Tracks.Add(track);
-    }
+    nextTrackColorIndex++;
+    Tracks.Add(track);
+  }
+  public void RemTrack(Track track) {
+		Tracks.Remove(track);
+	}
 
-    public void RemTrack(Track track)
-    {
-        Tracks.Remove(track);
-    }
-
-    public void SelectTrack(Track track)
-    {
+    public void SelectTrack(Track track) {
         SelectedTrack = track;
-        Tracks.ForEach(track => {
-            track.PanDrawSamples.BorderStyle = BorderStyle.None;
-            track.PanDrawSamples.BackColor = Settings.Color.TrackBg_Unselected;
-        });
+
+        foreach (Track other in Tracks) {
+            other.PanDrawSamples.BorderStyle = BorderStyle.None;
+            other.PanDrawSamples.BackColor = other.TrackColor.IsEmpty ? Settings.Color.TrackBg_Unselected : other.TrackColor;
+        }
+
         track.PanDrawSamples.BorderStyle = BorderStyle.Fixed3D;
-        track.PanDrawSamples.BackColor = Settings.Color.TrackBg_Selected;
+        track.PanDrawSamples.BackColor = track.TrackColor.IsEmpty ? Settings.Color.TrackBg_Selected : track.TrackColor;
     }
 
-    public void RedrawAll()
-    {
-        Tracks.ForEach(track => track.PanDrawSamples.Invalidate());
-    }
+    public void RedrawAll() {
+    Tracks.ForEach(track => track.PanDrawSamples.Invalidate());
+  }
 
-    public void ApplySettings()
-    {
+    public void ApplySettings() {
         foreach (Track track in Tracks)
         {
-            if (SelectedTrack == track)
-            {
-                track.PanDrawSamples.BackColor = Settings.Color.TrackBg_Selected;
-            }
-            else
-            {
-                track.PanDrawSamples.BackColor = Settings.Color.TrackBg_Unselected;
-            }
+            track.PanDrawSamples.BackColor = track.TrackColor.IsEmpty ? Settings.Color.TrackBg_Unselected : track.TrackColor;
         }
+
         RedrawAll();
     }
 
-    public void SaveToFile(string filename)
-    {
-        CombineTracks();
-        pseudoCombinedTrack.SaveToFile(filename);
-    }
+    public void SaveToFile(string filename) {
+    CombineTracks();
+    pseudoCombinedTrack.SaveToFile(filename);
+  }
 
     public void PlayAll()
     {
@@ -106,4 +98,24 @@ public class TrackManager
     {
         return (pseudoCombinedTrack?.GetPlayheadPos() ?? 0) / DrawTimescale;
     }
+    pseudoCombinedTrack = new(combinedSamples.ToArray());
+    pseudoCombinedTrack.LinkPanels(null, panContainer);
+  }
+  public void PauseAll() {
+    pseudoCombinedTrack?.Pause();
+  }
+
+  public void ResetAll()
+  {
+    pseudoCombinedTrack?.Dispose();
+    pseudoCombinedTrack = null;
+  }
+
+  public void ResumeAll()
+  {
+    pseudoCombinedTrack?.Resume();
+  }
+  public int GetPlayheadPos() {
+    return (pseudoCombinedTrack?.GetPlayheadPos() ?? 0) / DrawTimescale;
+  }
 }
