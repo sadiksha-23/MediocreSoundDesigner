@@ -339,40 +339,58 @@ public partial class FrmMain : Form
     trackManager.DrawTimescale = trkDrawTimescale.Maximum - trkDrawTimescale.Value;
     trackManager.RedrawAll();
   }
-
   // Helper methods
-  private Panel CreateTrackPanel(Track track)
-  {
-    Panel pan = new()
-    {
+  private Panel CreateTrackPanel(Track track) {
+    Panel pan = new() {
       BackColor = Settings.Color.TrackBg_Unselected,
       Width = panTracks.Width,
       Left = 0,
       Top = 0,
     };
-    pan.Click += (sender, e) =>
-    {
+
+    pan.Click += (sender, e) => {
       trackManager.SelectTrack(track);
     };
-    pan.DoubleClick += (sender, e) =>
-    {
+
+    pan.DoubleClick += (sender, e) => {
       track.ToggleDisabled();
       track.PanDrawSamples.Invalidate();
     };
-    pan.Paint += (sender, e) =>
-    {
+
+    pan.Paint += (sender, e) => {
       track.DrawSamples(e.Graphics, trackManager.DrawTimescale);
     };
-    panTracks.Controls.Add(pan);
-    track.LinkPanels(pan, panTracks);
+
+    ContextMenuStrip colorMenu = new() {
+      ShowImageMargin = false
+    };
+
+  colorMenu.Items.Add("Change track color...", null, (sender, e) => {
     trackManager.SelectTrack(track);
 
-    return pan;
-  }
+    using ColorDialog dialog = new() {
+      Color = track.TrackColor,
+      FullOpen = true
+    };
+
+    if (dialog.ShowDialog(this) == DialogResult.OK) {
+      track.SetTrackColor(dialog.Color);
+    }
+  });
+
+  pan.ContextMenuStrip = colorMenu;
+  pan.Disposed += (sender, e) => colorMenu.Dispose();
+
+  panTracks.Controls.Add(pan);
+  track.LinkPanels(pan, panTracks);
+  trackManager.SelectTrack(track);
+
+  return pan;
+}
 
   private void UpdateSizes()
   {
-    if (trackManager is null) { return; }
+    if (trackManager is null) { return; } // bug fix
     const int PADDING = 15;
 
     panTracks.Left = PADDING;
