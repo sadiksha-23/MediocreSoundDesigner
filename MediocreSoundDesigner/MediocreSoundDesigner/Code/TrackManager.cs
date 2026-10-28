@@ -1,6 +1,6 @@
 ﻿using NAudio.Wave;
 
-namespace MediocreSoundDesigner; 
+namespace MediocreSoundDesigner;
 
 public class TrackManager {
   private Track pseudoCombinedTrack;
@@ -60,24 +60,43 @@ public class TrackManager {
     pseudoCombinedTrack.SaveToFile(filename);
   }
 
-	public void PlayAll() {
-    CombineTracks();
-    pseudoCombinedTrack.Play();
-  }
-  private void CombineTracks() {
-    pseudoCombinedTrack?.Dispose();
-    List<float> combinedSamples = new();
-    foreach (Track track in Tracks) {
-      if (track.IsDisabled) {
-        continue;
-      }
-      float[] trackSamples = (float[])track.GetAdjustedSamples().Clone();
-      for (int i = 0; i < trackSamples.Length; i++) {
-        if (combinedSamples.Count <= i) {
-          combinedSamples.Add(0);
+    public void PlayAll()
+    {
+        CombineTracks();
+        pseudoCombinedTrack.Play();
+    }
+    private void CombineTracks()
+    {
+        pseudoCombinedTrack?.Dispose();
+        List<float> combinedSamples = new();
+        foreach (Track track in Tracks)
+        {
+            if (track.IsDisabled)
+            {
+                continue;
+            }
+            float[] trackSamples = (float[])track.GetAdjustedSamples().Clone();
+            for (int i = 0; i < trackSamples.Length; i++)
+            {
+                if (combinedSamples.Count <= i)
+                {
+                    combinedSamples.Add(0);
+                }
+                combinedSamples[i] += trackSamples[i];
+            }
         }
-        combinedSamples[i] += trackSamples[i];
-      }
+        Track first = Tracks.FirstOrDefault(t => !t.IsDisabled);
+        float[] mixed = combinedSamples.Select(s => Math.Clamp(s, -1f, 1f)).ToArray();
+        pseudoCombinedTrack = first is null ? new(mixed) : new(mixed, first.Format);
+        pseudoCombinedTrack.LinkPanels(null, panContainer);
+    }
+    public void PauseAll()
+    {
+        pseudoCombinedTrack?.Pause();
+    }
+    public int GetPlayheadPos()
+    {
+        return (pseudoCombinedTrack?.GetPlayheadPos() ?? 0) / DrawTimescale;
     }
     pseudoCombinedTrack = new(combinedSamples.ToArray());
     pseudoCombinedTrack.LinkPanels(null, panContainer);
