@@ -10,6 +10,7 @@ public partial class FrmMain : Form
   private Panel panTimeRuler;
   private string currentProjectPath;
   private ToolTip topButtonTips;
+  private ImageList smallToolbarIcons;
   private Track playbackTrack;
   private int selectionStart;
   private int selectionEnd;
@@ -38,6 +39,13 @@ public partial class FrmMain : Form
   {
     DoubleBuffered = true;
     trackManager = new(panTracks);
+    smallToolbarIcons = new ImageList(components)
+    {
+      ColorDepth = ColorDepth.Depth32Bit,
+      ImageSize = new Size(30, 30)
+    };
+    smallToolbarIcons.Images.Add(GetButtonIcon(buttonImport));
+    smallToolbarIcons.Images.Add(GetButtonIcon(buttonDeleteSelection));
 
     trkDrawTimescale.Minimum = 1;
     trkDrawTimescale.Maximum = 1000;
@@ -55,8 +63,6 @@ public partial class FrmMain : Form
     {
       HideMenuImageMargins(MainMenuStrip.Items);
     }
-    menuEdit.DropDownItems.Add("Trim to Selection", null, menuEditTrim_Click);
-    menuEdit.DropDownItems.Add("Delete Selection", null, menuEditDeleteSel_Click);
 
     panTimeRuler = new DrawingPanel
     {
@@ -151,7 +157,16 @@ public partial class FrmMain : Form
     buttonReset.ImageIndex = 8;
     buttonReset.ImageAlign = ContentAlignment.MiddleCenter;
 
-    Button[] toolbarButtons = { btnPlay, buttonReset, buttonRecord, buttonTrim };
+    buttonImport.ImageList = smallToolbarIcons;
+    buttonImport.ImageIndex = 0;
+    buttonImport.Image = null;
+    buttonImport.BackgroundImage = null;
+    buttonDeleteSelection.ImageList = smallToolbarIcons;
+    buttonDeleteSelection.ImageIndex = 1;
+    buttonDeleteSelection.Image = null;
+    buttonDeleteSelection.BackgroundImage = null;
+
+    Button[] toolbarButtons = { btnPlay, buttonReset, buttonRecord, buttonImport, buttonTrim, buttonDeleteSelection };
 
     foreach (Button button in toolbarButtons)
     {
@@ -176,13 +191,25 @@ public partial class FrmMain : Form
     };
     topButtonTips.SetToolTip(btnPlay, "Play/Pause");
     topButtonTips.SetToolTip(buttonRecord, "Record");
+    topButtonTips.SetToolTip(buttonImport, "Import Audio");
     topButtonTips.SetToolTip(buttonTrim, "Trim");
+    topButtonTips.SetToolTip(buttonDeleteSelection, "Delete Selection");
     topButtonTips.SetToolTip(buttonReset, "Reset to the start");
 
     tmrUpdate.Interval = 30;
     UpdateSizes();
     ApplySettings();
   }
+
+  private static Image GetButtonIcon(Button button)
+  {
+    if (button.Image is not null) return button.Image;
+    if (button.BackgroundImage is not null) return button.BackgroundImage;
+    if (button.ImageList is not null && button.ImageIndex >= 0 && button.ImageIndex < button.ImageList.Images.Count)
+      return button.ImageList.Images[button.ImageIndex];
+    throw new InvalidOperationException($"The {button.Name} button has no icon assigned.");
+  }
+
   private void ApplySettings()
   {
     BackColor = Settings.Color.WinBg;
@@ -496,6 +523,7 @@ public partial class FrmMain : Form
       SelectTrack(track);
       selectionStart = selectionEnd = e.X + firstVisiblePixel;
       pan.Invalidate();
+      UpdatePlaybackView();
     };
     pan.MouseMove += (sender, e) =>
     {
@@ -503,6 +531,7 @@ public partial class FrmMain : Form
       {
         selectionEnd = e.X + firstVisiblePixel;
         pan.Invalidate();
+        UpdatePlaybackView();
       }
     };
     pan.DoubleClick += (sender, e) =>
@@ -514,7 +543,7 @@ public partial class FrmMain : Form
     {
       GraphicsState state = e.Graphics.Save();
       e.Graphics.TranslateTransform(-firstVisiblePixel, 0);
-      track.DrawSamples(e.Graphics, trackManager.DrawTimescale);
+      track.DrawSamples(e.Graphics, trackManager.DrawTimescale, firstVisiblePixel);
       if (track == GetSelectedTrack() && selectionStart != selectionEnd)
       {
         track.ShowSelection(e.Graphics, Math.Min(selectionStart, selectionEnd), Math.Max(selectionStart, selectionEnd));
@@ -528,6 +557,14 @@ public partial class FrmMain : Form
       SelectTrack(track);
       using ColorDialog dialog = new() { Color = track.TrackColor, FullOpen = true };
       if (dialog.ShowDialog(this) == DialogResult.OK) track.SetTrackColor(dialog.Color);
+    });
+    colorMenu.Items.Add(new ToolStripSeparator());
+    colorMenu.Items.Add("Delete Track...", null, (sender, e) =>
+    {
+      if (MessageBox.Show(this, "Delete this track? This cannot be undone.", "Delete Track", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+      {
+        RemoveTrack(track);
+      }
     });
     pan.ContextMenuStrip = colorMenu;
     pan.Disposed += (sender, e) => colorMenu.Dispose();
@@ -562,6 +599,10 @@ public partial class FrmMain : Form
   private void SelectTrack(Track track)
   {
     if (track is null) return;
+    if (trackManager.SelectedTrack != track)
+    {
+      selectionStart = selectionEnd = 0;
+    }
     if (playbackTrack is not null && playbackTrack != track)
     {
       playbackTrack.Pause();
@@ -576,13 +617,11 @@ public partial class FrmMain : Form
   private void RemoveTrack(Track track)
   {
     if (track is null) return;
-    if (playbackTrack == track)
-    {
-      playbackTrack.Reset();
-      playbackTrack = null;
-      firstVisiblePixel = 0;
-      playheadPixel = 0;
-    }
+    trackManager.ResetAll();
+    playbackTrack = null;
+    firstVisiblePixel = 0;
+    playheadPixel = 0;
+    selectionStart = selectionEnd = 0;
     bool wasSelected = trackManager.SelectedTrack == track;
     trackManager.RemTrack(track);
     panTracks.Controls.Remove(track.PanDrawSamples);
@@ -611,13 +650,10 @@ public partial class FrmMain : Form
   private void AfterEdit(Track track)
   {
     selectionStart = selectionEnd = 0;
-    if (playbackTrack == track)
-    {
-      track.Reset();
-      playbackTrack = null;
-      firstVisiblePixel = 0;
-      playheadPixel = 0;
-    }
+    trackManager.ResetAll();
+    playbackTrack = null;
+    firstVisiblePixel = 0;
+    playheadPixel = 0;
     track.PanDrawSamples.Invalidate();
     UpdatePlaybackView();
   }
@@ -626,8 +662,11 @@ public partial class FrmMain : Form
   {
     if (trackManager is null || panTimeRuler is null || hsbTimeline is null) return;
     bool hasTracks = trackManager.Tracks.Count > 0;
+    bool hasSelection = hasTracks && GetSelectedTrack() is not null && selectionStart != selectionEnd;
     btnPlay.Enabled = hasTracks;
     buttonReset.Enabled = hasTracks;
+    buttonTrim.Enabled = hasSelection;
+    buttonDeleteSelection.Enabled = hasSelection;
     btnPlay.Visible = true;
     lblPlayhead.Visible = hasTracks;
     bool isPlaying = trackManager.State == NAudio.Wave.PlaybackState.Playing;
@@ -731,8 +770,11 @@ public partial class FrmMain : Form
     panTimeRuler.SetBounds(padding, rulerTop, contentWidth, 32 * DeviceDpi / 96);
 
     int tracksTop = panTimeRuler.Bottom + 4;
-    int tracksBottom = lbInstPanel.Top - 10 * DeviceDpi / 96;
+    int scrollbarHeight = SystemInformation.HorizontalScrollBarHeight;
+    int scrollbarGap = 3 * DeviceDpi / 96;
+    int tracksBottom = lbInstPanel.Top - scrollbarHeight - scrollbarGap;
     panTracks.SetBounds(padding, tracksTop, contentWidth, Math.Max(1, tracksBottom - tracksTop));
+    hsbTimeline.SetBounds(padding, tracksBottom + scrollbarGap, contentWidth, scrollbarHeight);
 
     int count = trackManager.Tracks.Count;
     for (int i = 0; i < count; i++)
@@ -748,15 +790,19 @@ public partial class FrmMain : Form
     lblPlayhead.BringToFront();
     panTimeRuler.BringToFront();
     trkDrawTimescale.BringToFront();
+    hsbTimeline.BringToFront();
 
     int toolbarGap = 10;
-    int toolbarWidth = btnPlay.Width + buttonReset.Width + buttonRecord.Width + buttonTrim.Width + toolbarGap * 3;
+    Button[] toolbarButtons = { btnPlay, buttonReset, buttonRecord, buttonImport, buttonTrim, buttonDeleteSelection };
+    int toolbarWidth = toolbarButtons.Sum(button => button.Width) + toolbarGap * (toolbarButtons.Length - 1);
     int toolbarLeft = (ClientSize.Width - toolbarWidth) / 2;
     int toolbarTop = 39 * DeviceDpi / 96;
-    btnPlay.Location = new Point(toolbarLeft, toolbarTop);
-    buttonReset.Location = new Point(toolbarLeft + btnPlay.Width + toolbarGap, toolbarTop);
-    buttonRecord.Location = new Point(toolbarLeft + btnPlay.Width + buttonReset.Width + toolbarGap * 2, toolbarTop);
-    buttonTrim.Location = new Point(toolbarLeft + btnPlay.Width + buttonReset.Width + buttonRecord.Width + toolbarGap * 3, toolbarTop);
+    int toolbarX = toolbarLeft;
+    foreach (Button button in toolbarButtons)
+    {
+      button.Location = new Point(toolbarX, toolbarTop);
+      toolbarX += button.Width + toolbarGap;
+    }
 
     UpdatePlaybackView();
   }
@@ -842,7 +888,7 @@ public partial class FrmMain : Form
   }
   private void buttonReset_Click(object sender, EventArgs e)
   {
-    (playbackTrack ?? GetSelectedTrack())?.Reset();
+    trackManager.ResetAll();
     playbackTrack = null;
     firstVisiblePixel = 0;
     playheadPixel = 0;
