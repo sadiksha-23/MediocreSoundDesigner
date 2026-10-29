@@ -5,389 +5,605 @@ namespace MediocreSoundDesigner;
 
 public partial class FrmMain : Form
 {
-    // fields
-    private TrackManager trackManager;
-    private string currentProjectPath;
+  // fields
+  private TrackManager trackManager;
+  private string currentProjectPath;
+  private ToolTip topButtonTips;
 
-    // ctor
-    public FrmMain()
+  // ctor
+  public FrmMain()
+  {
+    InitializeComponent();
+    Setup();
+  }
+
+  // setup
+  private void Setup()
+  {
+    DoubleBuffered = true;
+    trackManager = new(panTracks);
+
+    imageList1.ColorDepth = ColorDepth.Depth32Bit;
+    imageList1.ImageSize = new Size(30, 30);
+    imageList1.Images.Clear();
+
+    // Instrument icons: indexes 0–3
+    imageList1.Images.Add(buttonDrums.BackgroundImage);
+    imageList1.Images.Add(buttonGuitar.BackgroundImage);
+    imageList1.Images.Add(buttonPiano.BackgroundImage);
+    imageList1.Images.Add(buttonSynth.BackgroundImage);
+
+    // Toolbar icons: indexes 4–7
+    imageList1.Images.Add(Resources.play);
+    imageList1.Images.Add(Resources.pause);
+    imageList1.Images.Add(buttonRecord.BackgroundImage);
+    imageList1.Images.Add(buttonTrim.BackgroundImage);
+
+    // Toolbar icons: indexes 8
+    imageList1.Images.Add(Resources.reset);
+
+    buttonDrums.BackgroundImage = null;
+    buttonDrums.ImageList = imageList1;
+    buttonDrums.ImageIndex = 0;
+    buttonDrums.Text = "Drums";
+
+    buttonGuitar.BackgroundImage = null;
+    buttonGuitar.ImageList = imageList1;
+    buttonGuitar.ImageIndex = 1;
+    buttonGuitar.Text = "Guitar";
+
+    buttonPiano.BackgroundImage = null;
+    buttonPiano.ImageList = imageList1;
+    buttonPiano.ImageIndex = 2;
+    buttonPiano.Text = "Piano";
+
+    buttonSynth.BackgroundImage = null;
+    buttonSynth.ImageList = imageList1;
+    buttonSynth.ImageIndex = 3;
+    buttonSynth.Text = "Synth";
+
+    Button[] instrumentButtons = { buttonDrums, buttonGuitar, buttonPiano, buttonSynth };
+
+    foreach (Button button in instrumentButtons)
     {
-        InitializeComponent();
-        Setup();
+      button.Enabled = true;
+      button.AutoSize = false;
+      button.Size = new Size(88, 80);
+      button.UseVisualStyleBackColor = false;
+      button.BackColor = Color.FromArgb(58, 58, 58);
+      button.ForeColor = Color.White;
+      button.Font = new Font("Segoe UI", 9F, FontStyle.Regular);
+      button.FlatStyle = FlatStyle.Flat;
+      button.FlatAppearance.BorderSize = 1;
+      button.FlatAppearance.BorderColor = Color.FromArgb(82, 82, 82);
+      button.TextImageRelation = TextImageRelation.Overlay;
+      button.ImageAlign = ContentAlignment.TopCenter;
+      button.TextAlign = ContentAlignment.BottomCenter;
     }
 
-    // setup
-    private void Setup()
+    btnPlay.BackgroundImage = null;
+    btnPlay.ImageList = imageList1;
+    btnPlay.ImageIndex = 4;
+
+    buttonRecord.BackgroundImage = null;
+    buttonRecord.ImageList = imageList1;
+    buttonRecord.ImageIndex = 6;
+
+    buttonTrim.BackgroundImage = null;
+    buttonTrim.ImageList = imageList1;
+    buttonTrim.ImageIndex = 7;
+
+    buttonReset.BackgroundImage = null;
+    buttonReset.ImageList = imageList1;
+    buttonReset.ImageIndex = 8;
+    buttonReset.ImageAlign = ContentAlignment.MiddleCenter;
+
+    Button[] toolbarButtons = { btnPlay, buttonReset, buttonRecord, buttonTrim };
+
+    foreach (Button button in toolbarButtons)
     {
-        DoubleBuffered = true;
-        trackManager = new(panTracks);
-        btnPlay.BackgroundImage = Resources.play;
-        trackManager.DrawTimescale = trkDrawTimescale.Value;
-        UpdateSizes();
-        ApplySettings();
-    }
-    private void ApplySettings()
-    {
-        BackColor = Settings.Color.WinBg;
-        panTracks.BackColor = Settings.Color.TrackBg_Unselected;
-        lblPlayhead.BackColor = Settings.Color.Playline;
-        trackManager.ApplySettings();
+      button.AutoSize = false;
+      button.Size = new Size(48, 48);
+      button.Text = "";
+      button.ImageAlign = ContentAlignment.MiddleCenter;
+      button.UseVisualStyleBackColor = false;
+      button.BackColor = Color.FromArgb(58, 58, 58);
+      button.FlatStyle = FlatStyle.Flat;
+      button.FlatAppearance.BorderSize = 1;
+      button.FlatAppearance.BorderColor = Color.FromArgb(82, 82, 82);
+      button.FlatAppearance.MouseOverBackColor = Color.FromArgb(72, 72, 72);
     }
 
-    // GUI controls
-    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    topButtonTips = new ToolTip
     {
+      ShowAlways = true,
+      InitialDelay = 500,
+      AutoPopDelay = 5000,
+      ReshowDelay = 100
+    };
+    topButtonTips.SetToolTip(btnPlay, "Play/Pause");
+    topButtonTips.SetToolTip(buttonRecord, "Record");
+    topButtonTips.SetToolTip(buttonTrim, "Trim");
+    topButtonTips.SetToolTip(buttonReset, "Reset to the start");
+
+    trackManager.DrawTimescale = trkDrawTimescale.Value;
+    UpdateSizes();
+    ApplySettings();
+  }
+  private void ApplySettings()
+  {
+    BackColor = Settings.Color.WinBg;
+    panTracks.BackColor = Settings.Color.TrackBg_Unselected;
+    lblPlayhead.BackColor = Settings.Color.Playline;
+    lbInstPanel.BackColor = Settings.Color.WinBg;
+    trackManager.ApplySettings();
+  }
+
+  // GUI controls
+  protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+  {
+    if (trackManager.SelectedTrack is not null)
+    {
+      if (keyData == Keys.Left)
+      {
+        trackManager.SelectedTrack.ShiftSampleOver(-5);
+        trackManager.SelectedTrack.PanDrawSamples.Invalidate();
+        return true;
+      }
+      else if (keyData == Keys.Right)
+      {
+        trackManager.SelectedTrack.ShiftSampleOver(+5);
+        trackManager.SelectedTrack.PanDrawSamples.Invalidate();
+        return true;
+      }
+      else if (keyData == Keys.Delete)
+      {
         if (trackManager.SelectedTrack is not null)
         {
-            if (keyData == Keys.Left)
-            {
-                trackManager.SelectedTrack.ShiftSampleOver(-5);
-                trackManager.SelectedTrack.PanDrawSamples.Invalidate();
-                return true;
-            }
-            else if (keyData == Keys.Right)
-            {
-                trackManager.SelectedTrack.ShiftSampleOver(+5);
-                trackManager.SelectedTrack.PanDrawSamples.Invalidate();
-                return true;
-            }
-            else if (keyData == Keys.Delete)
-            {
-                if (trackManager.SelectedTrack is not null)
-                {
-                    if (MessageBox.Show("This will delete the selected track. This is NOT undoable!", "Are You Sure?", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Exclamation) == DialogResult.Yes)
-                    {
-                        panTracks.Controls.Remove(trackManager.SelectedTrack.PanDrawSamples);
-                        trackManager.SelectedTrack.PanDrawSamples.Dispose();
-                        trackManager.SelectedTrack.Dispose();
-                        trackManager.RemTrack(trackManager.SelectedTrack);
-                        UpdateSizes();
-                        return true;
-                    }
-                }
-            }
-        }
-        return base.ProcessCmdKey(ref msg, keyData);
-    }
-
-    private bool SaveCurrentProject(bool saveAs)
-    {
-        string path = currentProjectPath;
-
-        if (saveAs || path is null)
-        {
-            using SaveFileDialog dialog = new()
-            {
-                Filter = "Sound Designer Project (*.soundproj)|*.soundproj",
-                DefaultExt = "soundproj",
-                AddExtension = true,
-                FileName = path is null ? "" : Path.GetFileName(path)
-            };
-
-            if (dialog.ShowDialog() != DialogResult.OK)
-            {
-                return false;
-            }
-
-            path = dialog.FileName;
-        }
-
-        try
-        {
-            trackManager.SaveProject(path);
-            currentProjectPath = path;
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            MessageBox.Show($"Could not save the project:\n{ex.Message}", "Save Project", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return false;
-        }
-    }
-
-    private void FrmMain_SizeChanged(object sender, EventArgs e)
-    {
-        UpdateSizes();
-    }
-
-    private void btnPlay_Click(object sender, EventArgs e)
-    {
-        if (trackManager.State is NAudio.Wave.PlaybackState.Stopped or NAudio.Wave.PlaybackState.Paused)
-        {
-            trackManager.PlayAll();
-            btnPlay.BackgroundImage = Resources.pause;
-        }
-        else
-        {
-            trackManager.PauseAll();
-            btnPlay.BackgroundImage = Resources.play;
-        }
-    }
-
-    private void menuFileOpen_Click(object sender, EventArgs e)
-    {
-        ofdLoadFile.DefaultExt = "wav";
-        if (ofdLoadFile.ShowDialog() == DialogResult.OK)
-        {
-            Track newTrack = new(ofdLoadFile.FileName);
-            CreateTrackPanel(newTrack);
-            trackManager.AddTrack(newTrack);
+          if (MessageBox.Show("This will delete the selected track. This is NOT undoable!", "Are You Sure?", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Exclamation) == DialogResult.Yes)
+          {
+            panTracks.Controls.Remove(trackManager.SelectedTrack.PanDrawSamples);
+            trackManager.SelectedTrack.PanDrawSamples.Dispose();
+            trackManager.SelectedTrack.Dispose();
+            trackManager.RemTrack(trackManager.SelectedTrack);
             UpdateSizes();
-            newTrack.PanDrawSamples.Invalidate();
+            return true;
+          }
         }
+      }
     }
-    private void menuFileSave_Click(object sender, EventArgs e)
-    {
-        sfdSaveFile.DefaultExt = "wav";
-        if (sfdSaveFile.ShowDialog() == DialogResult.OK)
-        {
-            trackManager.SaveToFile(sfdSaveFile.FileName);
-        }
-    }
-    private void menuFileSettings_Click(object sender, EventArgs e)
-    {
-        FrmEditSettings frm = new();
-        frm.SetSound(trackManager.SelectedTrack);
-        if (frm.ShowDialog() == DialogResult.OK)
-        {
-            ApplySettings();
-        }
-    }
+    return base.ProcessCmdKey(ref msg, keyData);
+  }
 
-    private void menuEditFlip_Click(object sender, EventArgs e)
+  private bool SaveCurrentProject(bool saveAs)
+  {
+    string path = currentProjectPath;
+
+    if (saveAs || path is null)
     {
-        trackManager.SelectedTrack?.Flip();
-    }
-    private void menuEditReverse_Click(object sender, EventArgs e)
-    {
-        trackManager.SelectedTrack?.Reverse();
-    }
-    private void menuEditVolume_Click(object sender, EventArgs e)
-    {
-        if (trackManager.SelectedTrack is not null)
-        {
-            FrmEditVolume frm = new();
-            frm.SetSound(trackManager.SelectedTrack);
-            frm.ShowDialog();
-        }
-    }
-    private void menuEditEliminateSilence_Click(object sender, EventArgs e)
-    {
-        if (trackManager.SelectedTrack is not null)
-        {
-            FrmEditEliminateSilence frm = new();
-            frm.SetSound(trackManager.SelectedTrack);
-            frm.ShowDialog();
-        }
+      using SaveFileDialog dialog = new()
+      {
+        Filter = "Sound Designer Project (*.soundproj)|*.soundproj",
+        DefaultExt = "soundproj",
+        AddExtension = true,
+        FileName = path is null ? "" : Path.GetFileName(path)
+      };
+
+      if (dialog.ShowDialog() != DialogResult.OK)
+      {
+        return false;
+      }
+
+      path = dialog.FileName;
     }
 
-    private void menuGenRecord_Click(object sender, EventArgs e)
+    try
     {
-        Track newTrack = new(new float[0]);
-        CreateTrackPanel(newTrack);
-        trackManager.AddTrack(newTrack);
-        UpdateSizes();
-        newTrack.PanDrawSamples.Invalidate();
-
-        FrmGenRecord frm = new();
-        frm.SetSound(trackManager.SelectedTrack);
-        if (frm.ShowDialog() == DialogResult.Cancel)
-        {
-            trackManager.RemTrack(newTrack);
-        }
+      trackManager.SaveProject(path);
+      currentProjectPath = path;
+      return true;
     }
-    private void menuGenNoise_Click(object sender, EventArgs e)
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
     {
-        const int NUM_SAMPLES = 100_000;
-        float[] samples = new float[NUM_SAMPLES];
-        Random rand = new();
-        for (int i = 0; i < NUM_SAMPLES; i++)
-        {
-            samples[i] = rand.NextSingle() * 2.0f - 1.0f;
-        }
-        Track newTrack = new(samples);
-        CreateTrackPanel(newTrack);
-        trackManager.AddTrack(newTrack);
-        UpdateSizes();
-        newTrack.PanDrawSamples.Invalidate();
+      MessageBox.Show($"Could not save the project:\n{ex.Message}", "Save Project", MessageBoxButtons.OK, MessageBoxIcon.Error);
+      return false;
     }
-    private void menuGenGradientNoise_Click(object sender, EventArgs e)
+  }
+
+  private void FrmMain_SizeChanged(object sender, EventArgs e)
+  {
+    UpdateSizes();
+  }
+
+  private void btnPlay_Click(object sender, EventArgs e)
+  {
+    if (trackManager.State == NAudio.Wave.PlaybackState.Stopped)
     {
-        const int NUM_SAMPLES = 250_000;
-        float[] samples = new float[NUM_SAMPLES];
-        Random rand = new();
-        float cur = 0;
-        float inc = 0.005f;
-        int dir = +1;
-        for (int i = 0; i < NUM_SAMPLES; i++)
-        {
-            cur += (inc * dir);
-            if (rand.NextSingle() < 0.5f)
-            {
-                dir *= -1;
-            }
-            if (cur > 0.9f)
-            {
-                dir = -1;
-            }
-            if (cur < -0.9f)
-            {
-                dir = +1;
-            }
-            samples[i] = cur;
-        }
-        Track newTrack = new(samples);
-        CreateTrackPanel(newTrack);
-        trackManager.AddTrack(newTrack);
-        UpdateSizes();
-        newTrack.PanDrawSamples.Invalidate();
+      trackManager.PlayAll();
     }
-
-    private void tmrUpdatePlaybackState_Tick(object sender, EventArgs e)
+    else if (trackManager.State == NAudio.Wave.PlaybackState.Paused)
     {
-        if (trackManager.Tracks.Count > 0)
-        {
-            btnPlay.BackgroundImage = trackManager.State == NAudio.Wave.PlaybackState.Playing ? Resources.pause : Resources.play;
-            btnPlay.Visible = true;
-            lblPlayhead.Left = trackManager.GetPlayheadPos();
-            lblPlayhead.Visible = true;
-        }
-        else
-        {
-            btnPlay.BackgroundImage = null;
-            btnPlay.Visible = false;
-            lblPlayhead.Visible = false;
-        }
+      trackManager.ResumeAll();
     }
-
-    private void trkDrawTimescale_Scroll(object sender, EventArgs e)
+    else if (trackManager.State == NAudio.Wave.PlaybackState.Playing)
     {
-        trackManager.DrawTimescale = trkDrawTimescale.Maximum - trkDrawTimescale.Value;
-        trackManager.RedrawAll();
+      trackManager.PauseAll();
     }
+  }
 
-    // Helper methods
-    private Panel CreateTrackPanel(Track track)
+  private void menuFileOpen_Click(object sender, EventArgs e)
+  {
+    ofdLoadFile.DefaultExt = "wav";
+    if (ofdLoadFile.ShowDialog() == DialogResult.OK)
     {
-        Panel pan = new()
-        {
-            BackColor = Settings.Color.TrackBg_Unselected,
-            Width = panTracks.Width,
-            Left = 0,
-            Top = 0,
-        };
-        pan.Click += (sender, e) =>
-        {
-            trackManager.SelectTrack(track);
-        };
-        pan.DoubleClick += (sender, e) =>
-        {
-            track.ToggleDisabled();
-            track.PanDrawSamples.Invalidate();
-        };
-        pan.Paint += (sender, e) =>
-        {
-            track.DrawSamples(e.Graphics, trackManager.DrawTimescale);
-        };
-        panTracks.Controls.Add(pan);
-        track.LinkPanels(pan, panTracks);
-        trackManager.SelectTrack(track);
-
-        return pan;
+      Track newTrack = new(ofdLoadFile.FileName);
+      CreateTrackPanel(newTrack);
+      trackManager.AddTrack(newTrack);
+      UpdateSizes();
+      newTrack.PanDrawSamples.Invalidate();
     }
-
-    private void RebuildTrackPanels()
-    {
-        List<Track> loadedTracks = new(trackManager.Tracks);
-        trackManager.Tracks.Clear();
-
-        foreach (Track track in loadedTracks)
-        {
-            CreateTrackPanel(track);
-            trackManager.AddTrack(track);
-        }
-
-        UpdateSizes();
-        trackManager.RedrawAll();
-    }
-
-    private void UpdateSizes()
-    {
-        const int PADDING = 15;
-
-        panTracks.Left = PADDING;
-        panTracks.Width = ClientSize.Width - (PADDING * 2);
-
-        int top = 0;
-        foreach (Track track in trackManager.Tracks)
-        {
-            track.PanDrawSamples.Left = 0;
-            track.PanDrawSamples.Width = panTracks.Width;
-            track.PanDrawSamples.Height = (panTracks.Height / trackManager.Tracks.Count) - 1;
-            track.PanDrawSamples.Top = top;
-            track.PanDrawSamples.Invalidate();
-            top += track.PanDrawSamples.Height;
-        }
-        trkDrawTimescale.Width = panTracks.Width;
-        trkDrawTimescale.Left = PADDING;
-        lblPlayhead.Left = 0;
-        lblPlayhead.Height = panTracks.Height;
-        lblPlayhead.BringToFront();
-    }
-
-    private void saveToolStripMenuItem_Click(object sender, EventArgs e)
-    {
-        SaveCurrentProject(false);
-    }
-
-    private void saveAsToolStripMenuItem_Click(object sender, EventArgs e)
-    {
-        SaveCurrentProject(true);
-    }
-
-    private void openToolStripMenuItem_Click(object sender, EventArgs e)
-    {
-        using OpenFileDialog dialog = new()
-        {
-            Filter = "Sound Designer Project (*.soundproj)|*.soundproj",
-            DefaultExt = "soundproj"
-        };
-
-        if (dialog.ShowDialog() != DialogResult.OK)
-        {
+  }
+    private void menuFileSave_Click(object sender, EventArgs e) {
+        if (trackManager.Tracks.Count == 0 || trackManager.Tracks.All(t => t.IsDisabled)) {
+            MessageBox.Show("There are no enabled tracks to export.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
-        try
-        {
-            trackManager.LoadProject(dialog.FileName);
-            RebuildTrackPanels();
-            currentProjectPath = dialog.FileName;
+        sfdSaveFile.Filter = "WAV Audio (*.wav)|*.wav|MP3 Audio (*.mp3)|*.mp3";
+        sfdSaveFile.DefaultExt = "wav";
+        sfdSaveFile.AddExtension = true;
+        if (sfdSaveFile.ShowDialog() != DialogResult.OK) {
+            return;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
-        {
-            MessageBox.Show($"Could not open the project:\n{ex.Message}", "Open Project", MessageBoxButtons.OK, MessageBoxIcon.Error);
+
+        string ext = sfdSaveFile.FilterIndex == 2 ? ".mp3" : ".wav";
+        string path = sfdSaveFile.FileName;
+        string current = Path.GetExtension(path);
+        if (current.Equals(".wav", StringComparison.OrdinalIgnoreCase) || current.Equals(".mp3", StringComparison.OrdinalIgnoreCase)){
+            path = Path.ChangeExtension(path, ext);
+        }
+        else if (!path.EndsWith(ext, StringComparison.OrdinalIgnoreCase)) {
+            path += ext;
+        }
+
+        try {
+            Cursor = Cursors.WaitCursor;
+            trackManager.SaveToFile(path);
+        }
+        catch (Exception ex) {
+            MessageBox.Show($"Could not export the file:\n{ex.Message}", "Export", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally {
+            Cursor = Cursors.Default;
         }
     }
-    private void menuFileNewProject_Click(object sender, EventArgs e)
+    private void menuFileSettings_Click(object sender, EventArgs e) {
+    FrmEditSettings frm = new();
+    frm.SetSound(trackManager.SelectedTrack);
+    if (frm.ShowDialog() == DialogResult.OK)
     {
-        if (trackManager.Tracks.Count > 0)
-        {
-            DialogResult choice = MessageBox.Show("Save the current project before starting a new one?", "New Project", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-
-            if (choice == DialogResult.Cancel)
-            {
-                return;
-            }
-
-            if (choice == DialogResult.Yes && !SaveCurrentProject(false))
-            {
-                return;
-            }
-        }
-
-        trackManager.NewProject();
-        currentProjectPath = null;
-        UpdateSizes();
+      ApplySettings();
     }
+  }
+
+  private void menuEditFlip_Click(object sender, EventArgs e)
+  {
+    trackManager.SelectedTrack?.Flip();
+  }
+  private void menuEditReverse_Click(object sender, EventArgs e)
+  {
+    trackManager.SelectedTrack?.Reverse();
+  }
+  private void menuEditVolume_Click(object sender, EventArgs e)
+  {
+    if (trackManager.SelectedTrack is not null)
+    {
+      FrmEditVolume frm = new();
+      frm.SetSound(trackManager.SelectedTrack);
+      frm.ShowDialog();
+    }
+  }
+  private void menuEditEliminateSilence_Click(object sender, EventArgs e)
+  {
+    if (trackManager.SelectedTrack is not null)
+    {
+      FrmEditEliminateSilence frm = new();
+      frm.SetSound(trackManager.SelectedTrack);
+      frm.ShowDialog();
+    }
+  }
+
+  private void menuGenRecord_Click(object sender, EventArgs e)
+  {
+    Track newTrack = new(new float[0]);
+    CreateTrackPanel(newTrack);
+    trackManager.AddTrack(newTrack);
+    UpdateSizes();
+    newTrack.PanDrawSamples.Invalidate();
+
+    FrmGenRecord frm = new();
+    frm.SetSound(trackManager.SelectedTrack);
+    if (frm.ShowDialog() == DialogResult.Cancel)
+    {
+      trackManager.RemTrack(newTrack);
+    }
+  }
+  private void menuGenNoise_Click(object sender, EventArgs e)
+  {
+    const int NUM_SAMPLES = 100_000;
+    float[] samples = new float[NUM_SAMPLES];
+    Random rand = new();
+    for (int i = 0; i < NUM_SAMPLES; i++)
+    {
+      samples[i] = rand.NextSingle() * 2.0f - 1.0f;
+    }
+    Track newTrack = new(samples);
+    CreateTrackPanel(newTrack);
+    trackManager.AddTrack(newTrack);
+    UpdateSizes();
+    newTrack.PanDrawSamples.Invalidate();
+  }
+  private void menuGenGradientNoise_Click(object sender, EventArgs e)
+  {
+    const int NUM_SAMPLES = 250_000;
+    float[] samples = new float[NUM_SAMPLES];
+    Random rand = new();
+    float cur = 0;
+    float inc = 0.005f;
+    int dir = +1;
+    for (int i = 0; i < NUM_SAMPLES; i++)
+    {
+      cur += (inc * dir);
+      if (rand.NextSingle() < 0.5f)
+      {
+        dir *= -1;
+      }
+      if (cur > 0.9f)
+      {
+        dir = -1;
+      }
+      if (cur < -0.9f)
+      {
+        dir = +1;
+      }
+      samples[i] = cur;
+    }
+    Track newTrack = new(samples);
+    CreateTrackPanel(newTrack);
+    trackManager.AddTrack(newTrack);
+    UpdateSizes();
+    newTrack.PanDrawSamples.Invalidate();
+  }
+
+  private void tmrUpdatePlaybackState_Tick(object sender, EventArgs e)
+  {
+    bool hasTracks = trackManager.Tracks.Count > 0;
+
+    btnPlay.Visible = true;
+    btnPlay.Enabled = hasTracks;
+    buttonReset.Enabled = hasTracks;
+    btnPlay.ImageIndex = trackManager.State == NAudio.Wave.PlaybackState.Playing ? 5 : 4;
+
+    topButtonTips.SetToolTip(
+        btnPlay,
+        trackManager.State == NAudio.Wave.PlaybackState.Playing ? "Pause" : "Play");
+
+    lblPlayhead.Visible = hasTracks;
+    if (hasTracks)
+    {
+      lblPlayhead.Left = trackManager.GetPlayheadPos();
+    }
+  }
+
+  private void trkDrawTimescale_Scroll(object sender, EventArgs e)
+  {
+    trackManager.DrawTimescale = trkDrawTimescale.Maximum - trkDrawTimescale.Value;
+    trackManager.RedrawAll();
+  }
+  // Helper methods
+  private Panel CreateTrackPanel(Track track) {
+    Panel pan = new() {
+      BackColor = Settings.Color.TrackBg_Unselected,
+      Width = panTracks.Width,
+      Left = 0,
+      Top = 0,
+    };
+
+    pan.Click += (sender, e) => {
+      trackManager.SelectTrack(track);
+    };
+
+    pan.DoubleClick += (sender, e) => {
+      track.ToggleDisabled();
+      track.PanDrawSamples.Invalidate();
+    };
+
+    pan.Paint += (sender, e) => {
+      track.DrawSamples(e.Graphics, trackManager.DrawTimescale);
+    };
+
+    ContextMenuStrip colorMenu = new() {
+      ShowImageMargin = false
+    };
+
+  colorMenu.Items.Add("Change track color...", null, (sender, e) => {
+    trackManager.SelectTrack(track);
+
+    using ColorDialog dialog = new() {
+      Color = track.TrackColor,
+      FullOpen = true
+    };
+
+    if (dialog.ShowDialog(this) == DialogResult.OK) {
+      track.SetTrackColor(dialog.Color);
+    }
+  });
+
+  pan.ContextMenuStrip = colorMenu;
+  pan.Disposed += (sender, e) => colorMenu.Dispose();
+
+  panTracks.Controls.Add(pan);
+  track.LinkPanels(pan, panTracks);
+  trackManager.SelectTrack(track);
+
+  return pan;
 }
+
+  private void RebuildTrackPanels()
+  {
+    List<Track> loadedTracks = new(trackManager.Tracks);
+    trackManager.Tracks.Clear();
+
+    foreach (Track track in loadedTracks)
+    {
+      CreateTrackPanel(track);
+      trackManager.AddTrack(track);
+    }
+
+    UpdateSizes();
+    trackManager.RedrawAll();
+  }
+
+  private void UpdateSizes()
+  {
+    if (trackManager is null) { return; } // bug fix
+    const int PADDING = 15;
+
+    panTracks.Left = PADDING;
+    panTracks.Width = ClientSize.Width - (PADDING * 2);
+
+    int top = 0;
+    foreach (Track track in trackManager.Tracks)
+    {
+      track.PanDrawSamples.Left = 0;
+      track.PanDrawSamples.Width = panTracks.Width;
+      track.PanDrawSamples.Height = (panTracks.Height / trackManager.Tracks.Count) - 1;
+      track.PanDrawSamples.Top = top;
+      track.PanDrawSamples.Invalidate();
+      top += track.PanDrawSamples.Height;
+    }
+    trkDrawTimescale.Width = panTracks.Width;
+    trkDrawTimescale.Left = PADDING;
+    lblPlayhead.Left = 0;
+    lblPlayhead.Height = panTracks.Height;
+    lblPlayhead.BringToFront();
+
+    int gap = 14;
+    int rowWidth = buttonDrums.Width + buttonGuitar.Width +
+                   buttonPiano.Width + buttonSynth.Width + gap * 3;
+    int left = (ClientSize.Width - rowWidth) / 2;
+    int y = 935;
+    lbInstPanel.Size = new Size(rowWidth, 24);
+    lbInstPanel.Location = new Point(left, y - lbInstPanel.Height - 10);
+
+    buttonDrums.Location = new Point(left, y);
+    buttonGuitar.Location = new Point(left + buttonDrums.Width + gap, y);
+    buttonPiano.Location = new Point(left + buttonDrums.Width + buttonGuitar.Width + gap * 2, y);
+    buttonSynth.Location = new Point(left + buttonDrums.Width + buttonGuitar.Width + buttonPiano.Width + gap * 3, y);
+
+    int toolbarGap = 10;
+    int toolbarWidth = btnPlay.Width + buttonReset.Width +
+                       buttonRecord.Width + buttonTrim.Width + toolbarGap * 3;
+    int toolbarLeft = (ClientSize.Width - toolbarWidth) / 2;
+    int toolbarTop = 39;
+
+    btnPlay.Location = new Point(toolbarLeft, toolbarTop);
+    buttonReset.Location = new Point(toolbarLeft + btnPlay.Width + toolbarGap, toolbarTop);
+    buttonRecord.Location = new Point(toolbarLeft + btnPlay.Width + buttonReset.Width + toolbarGap * 2, toolbarTop);
+    buttonTrim.Location = new Point(toolbarLeft + btnPlay.Width + buttonReset.Width + buttonRecord.Width + toolbarGap * 3, toolbarTop);
+  }
+
+  private void flpInstruments_Paint(object sender, PaintEventArgs e)
+  {
+
+  }
+
+  private void buttonSynth_Click(object sender, EventArgs e)
+  {
+
+  }
+
+  private void buttonGuitar_Click(object sender, EventArgs e)
+  {
+
+  }
+
+  private void buttonPiano_Click(object sender, EventArgs e)
+  {
+
+  }
+
+  private void buttonDrums_Click(object sender, EventArgs e)
+  {
+
+  }
+
+  private void lbInstPanel_TextChanged(object sender, EventArgs e)
+  {
+
+  }
+
+  private void buttonReset_Click(object sender, EventArgs e)
+  {
+    trackManager.ResetAll();
+    btnPlay.ImageIndex = 4;
+    lblPlayhead.Left = 0;
+  }
+  private void saveToolStripMenuItem_Click(object sender, EventArgs e)
+  {
+    SaveCurrentProject(false);
+  }
+
+  private void saveAsToolStripMenuItem_Click(object sender, EventArgs e)
+  {
+    SaveCurrentProject(true);
+  }
+
+  private void openToolStripMenuItem_Click(object sender, EventArgs e)
+  {
+    using OpenFileDialog dialog = new()
+    {
+      Filter = "Sound Designer Project (*.soundproj)|*.soundproj",
+      DefaultExt = "soundproj"
+    };
+
+    if (dialog.ShowDialog() != DialogResult.OK)
+    {
+      return;
+    }
+
+    try
+    {
+      trackManager.LoadProject(dialog.FileName);
+      RebuildTrackPanels();
+      currentProjectPath = dialog.FileName;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+    {
+      MessageBox.Show($"Could not open the project:\n{ex.Message}", "Open Project", MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+  }
+
+  private void menuFileNewProject_Click(object sender, EventArgs e)
+  {
+    if (trackManager.Tracks.Count > 0)
+    {
+      DialogResult choice = MessageBox.Show("Save the current project before starting a new one?", "New Project", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+
+      if (choice == DialogResult.Cancel)
+      {
+        return;
+      }
+
+      if (choice == DialogResult.Yes && !SaveCurrentProject(false))
+      {
+        return;
+      }
+    }
+
+    trackManager.NewProject();
+    currentProjectPath = null;
+    UpdateSizes();
+  }
+}
+
