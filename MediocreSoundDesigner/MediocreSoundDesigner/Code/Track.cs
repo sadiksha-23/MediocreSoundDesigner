@@ -80,15 +80,27 @@ public class Track : IDisposable
     this.sampleRate = 0;
     IsDisabled = false;
   }
+  public Track(TrackData data) : this((float[])data.Samples.Clone()) {
+    sampleRate = data.SampleRate;
+    channels = data.Channels;
+    Volume = data.Volume;
+    DrawOffset = data.DrawOffset;
+    IsDisabled = data.IsDisabled;
+
+    if (sampleRate > 0 && channels > 0) {
+        duration = TimeSpan.FromSeconds((double)samples.Length / sampleRate / channels);
+    }
+  }
 
   public Track(float[] samples, WaveFormat format) : this(samples) {
-    overrideFormat = format;
+      overrideFormat = format;
   }
 
   public void LinkPanels(Panel panDrawSamples, Panel panContainer) {
-    this.PanDrawSamples = panDrawSamples;
-    this.panContainer = panContainer;
+      this.PanDrawSamples = panDrawSamples;
+      this.panContainer = panContainer;
   }
+  
 
   // edits
   public float[] CloneSamples() {
@@ -229,26 +241,33 @@ public class Track : IDisposable
   public void ToggleDisabled() {
     IsDisabled = !IsDisabled;
   }
+    public TrackData GetProjectData() {
+    return new TrackData {
+        Samples = CloneSamples(),
+        SampleRate = sampleRate,
+        Channels = channels,
+        Volume = Volume,
+        DrawOffset = DrawOffset,
+        IsDisabled = IsDisabled
+    };
+  }
 
-    // file i/o
-    private void SaveToTempFile()
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(tempFilePath));
-        using var writer = new WaveFileWriter(tempFilePath, fileReader?.WaveFormat ?? new());
-        writer.WriteSamples(GetAdjustedSamples(), 0, samples.Length);
-    }
-    public void SaveToFile(string path)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(path));
-        if (Path.GetExtension(path).Equals(".mp3", StringComparison.OrdinalIgnoreCase))
-        {
-            SaveToMp3(path);
-        }
-        else
-        {
-            SaveToWav(path);
-        }
-    }
+// file i/o
+  private void SaveToTempFile() {
+      Directory.CreateDirectory(Path.GetDirectoryName(tempFilePath));
+      using var writer = new WaveFileWriter(tempFilePath, fileReader?.WaveFormat ?? new());
+      writer.WriteSamples(GetAdjustedSamples(), 0, samples.Length);
+  }
+
+  public void SaveToFile(string path) {
+      Directory.CreateDirectory(Path.GetDirectoryName(path));
+      if (Path.GetExtension(path).Equals(".mp3", StringComparison.OrdinalIgnoreCase)) {
+          SaveToMp3(path);
+      }
+      else {
+          SaveToWav(path);
+      }
+  }
     private void SaveToWav(string path)
     {
         float[] adj = GetAdjustedSamples();

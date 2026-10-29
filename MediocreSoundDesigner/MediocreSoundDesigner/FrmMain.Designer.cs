@@ -1,4 +1,4 @@
-﻿namespace MediocreSoundDesigner
+namespace MediocreSoundDesigner
 {
     partial class FrmMain
     {
@@ -37,6 +37,10 @@
       ofdLoadFile = new OpenFileDialog();
       menu = new MenuStrip();
       menuFile = new ToolStripMenuItem();
+      newToolStripMenuItem = new ToolStripMenuItem();
+      openToolStripMenuItem = new ToolStripMenuItem();
+      saveToolStripMenuItem = new ToolStripMenuItem();
+      saveAsToolStripMenuItem = new ToolStripMenuItem();
       menuFileOpen = new ToolStripMenuItem();
       menuFileSave = new ToolStripMenuItem();
       menuFileSettings = new ToolStripMenuItem();
@@ -132,23 +136,53 @@
       // 
       // menuFile
       // 
-      menuFile.DropDownItems.AddRange(new ToolStripItem[] { menuFileOpen, menuFileSave, menuFileSettings });
+      menuFile.DropDownItems.AddRange(new ToolStripItem[] { newToolStripMenuItem, openToolStripMenuItem, saveToolStripMenuItem, saveAsToolStripMenuItem, menuFileOpen, menuFileSave, menuFileSettings });
       menuFile.Name = "menuFile";
       menuFile.Size = new Size(46, 24);
       menuFile.Text = "&File";
-      // 
+      //
+      // newToolStripMenuItem
+      //
+      newToolStripMenuItem.Name = "newToolStripMenuItem";
+      newToolStripMenuItem.Size = new Size(224, 26);
+      newToolStripMenuItem.Text = "New";
+      newToolStripMenuItem.Click += menuFileNewProject_Click;
+      //
+      // openToolStripMenuItem
+      //
+      openToolStripMenuItem.Name = "openToolStripMenuItem";
+      openToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.O;
+      openToolStripMenuItem.Size = new Size(224, 26);
+      openToolStripMenuItem.Text = "Open Project...";
+      openToolStripMenuItem.Click += openToolStripMenuItem_Click;
+      //
+      // saveToolStripMenuItem
+      //
+      saveToolStripMenuItem.Name = "saveToolStripMenuItem";
+      saveToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.S;
+      saveToolStripMenuItem.Size = new Size(224, 26);
+      saveToolStripMenuItem.Text = "Save Project";
+      saveToolStripMenuItem.Click += saveToolStripMenuItem_Click;
+      //
+      // saveAsToolStripMenuItem
+      //
+      saveAsToolStripMenuItem.Name = "saveAsToolStripMenuItem";
+      saveAsToolStripMenuItem.Size = new Size(224, 26);
+      saveAsToolStripMenuItem.Text = "Save Project As...";
+      saveAsToolStripMenuItem.Click += saveAsToolStripMenuItem_Click;
+      //
       // menuFileOpen
       // 
       menuFileOpen.Name = "menuFileOpen";
       menuFileOpen.Size = new Size(154, 26);
-      menuFileOpen.Text = "Open...";
+      menuFileOpen.Text = "Import...";
       menuFileOpen.Click += menuFileOpen_Click;
       // 
       // menuFileSave
       // 
       menuFileSave.Name = "menuFileSave";
       menuFileSave.Size = new Size(154, 26);
-      menuFileSave.Text = "Save...";
+      menuFileSave.Text = "Export...";
       menuFileSave.Click += menuFileSave_Click;
       // 
       // menuFileSettings
@@ -426,6 +460,10 @@
     private ToolStripMenuItem menuEditEliminateSilence;
     private Label lblPlayhead;
     private ToolStripMenuItem menuFileSettings;
+    private ToolStripMenuItem newToolStripMenuItem;
+    private ToolStripMenuItem openToolStripMenuItem;
+    private ToolStripMenuItem saveToolStripMenuItem;
+    private ToolStripMenuItem saveAsToolStripMenuItem;
     private Button buttonRecord;
     private Button buttonTrim;
     private Button buttonGuitar;
@@ -437,3 +475,4 @@
     private Button buttonReset;
   }
 }
+

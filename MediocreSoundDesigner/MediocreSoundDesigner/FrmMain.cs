@@ -7,6 +7,7 @@ public partial class FrmMain : Form
 {
   // fields
   private TrackManager trackManager;
+  private string currentProjectPath;
   private ToolTip topButtonTips;
 
   // ctor
@@ -172,6 +173,41 @@ public partial class FrmMain : Form
       }
     }
     return base.ProcessCmdKey(ref msg, keyData);
+  }
+
+  private bool SaveCurrentProject(bool saveAs)
+  {
+    string path = currentProjectPath;
+
+    if (saveAs || path is null)
+    {
+      using SaveFileDialog dialog = new()
+      {
+        Filter = "Sound Designer Project (*.soundproj)|*.soundproj",
+        DefaultExt = "soundproj",
+        AddExtension = true,
+        FileName = path is null ? "" : Path.GetFileName(path)
+      };
+
+      if (dialog.ShowDialog() != DialogResult.OK)
+      {
+        return false;
+      }
+
+      path = dialog.FileName;
+    }
+
+    try
+    {
+      trackManager.SaveProject(path);
+      currentProjectPath = path;
+      return true;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+    {
+      MessageBox.Show($"Could not save the project:\n{ex.Message}", "Save Project", MessageBoxButtons.OK, MessageBoxIcon.Error);
+      return false;
+    }
   }
 
   private void FrmMain_SizeChanged(object sender, EventArgs e)
@@ -413,6 +449,21 @@ public partial class FrmMain : Form
   return pan;
 }
 
+  private void RebuildTrackPanels()
+  {
+    List<Track> loadedTracks = new(trackManager.Tracks);
+    trackManager.Tracks.Clear();
+
+    foreach (Track track in loadedTracks)
+    {
+      CreateTrackPanel(track);
+      trackManager.AddTrack(track);
+    }
+
+    UpdateSizes();
+    trackManager.RedrawAll();
+  }
+
   private void UpdateSizes()
   {
     if (trackManager is null) { return; } // bug fix
@@ -498,4 +549,61 @@ public partial class FrmMain : Form
     btnPlay.ImageIndex = 4;
     lblPlayhead.Left = 0;
   }
+  private void saveToolStripMenuItem_Click(object sender, EventArgs e)
+  {
+    SaveCurrentProject(false);
+  }
+
+  private void saveAsToolStripMenuItem_Click(object sender, EventArgs e)
+  {
+    SaveCurrentProject(true);
+  }
+
+  private void openToolStripMenuItem_Click(object sender, EventArgs e)
+  {
+    using OpenFileDialog dialog = new()
+    {
+      Filter = "Sound Designer Project (*.soundproj)|*.soundproj",
+      DefaultExt = "soundproj"
+    };
+
+    if (dialog.ShowDialog() != DialogResult.OK)
+    {
+      return;
+    }
+
+    try
+    {
+      trackManager.LoadProject(dialog.FileName);
+      RebuildTrackPanels();
+      currentProjectPath = dialog.FileName;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+    {
+      MessageBox.Show($"Could not open the project:\n{ex.Message}", "Open Project", MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+  }
+
+  private void menuFileNewProject_Click(object sender, EventArgs e)
+  {
+    if (trackManager.Tracks.Count > 0)
+    {
+      DialogResult choice = MessageBox.Show("Save the current project before starting a new one?", "New Project", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+
+      if (choice == DialogResult.Cancel)
+      {
+        return;
+      }
+
+      if (choice == DialogResult.Yes && !SaveCurrentProject(false))
+      {
+        return;
+      }
+    }
+
+    trackManager.NewProject();
+    currentProjectPath = null;
+    UpdateSizes();
+  }
 }
+
