@@ -1,4 +1,4 @@
-﻿using NAudio.MediaFoundation;
+using NAudio.MediaFoundation;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 
@@ -40,6 +40,14 @@ public class Track : IDisposable
     private string tempFilePath => Path.Combine(Path.GetTempPath(), "MediocreSoundDesigner", "temp.wav");
     public PlaybackState State => outputDevice?.PlaybackState ?? PlaybackState.Stopped;
     public WaveFormat Format => fileReader?.WaveFormat ?? overrideFormat ?? new WaveFormat(); 
+    public int SampleValuesPerSecond {
+        get {
+            WaveFormat format = fileReader?.WaveFormat ?? overrideFormat ?? new WaveFormat();
+            int rate = sampleRate > 0 ? sampleRate : format.SampleRate;
+            int channelCount = channels > 0 ? channels : format.Channels;
+            return rate * channelCount;
+        }
+    }
 
     // ctor
     public Track(string file)

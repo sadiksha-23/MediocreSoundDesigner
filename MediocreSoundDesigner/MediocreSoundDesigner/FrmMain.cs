@@ -7,8 +7,16 @@ public partial class FrmMain : Form
 {
   // fields
   private TrackManager trackManager;
+  private Panel panTimeRuler;
   private string currentProjectPath;
   private ToolTip topButtonTips;
+
+  private sealed class DrawingPanel : Panel {
+    public DrawingPanel() {
+      DoubleBuffered = true;
+      ResizeRedraw = true;
+    }
+  }
 
   // ctor
   public FrmMain()
@@ -22,6 +30,14 @@ public partial class FrmMain : Form
   {
     DoubleBuffered = true;
     trackManager = new(panTracks);
+
+    panTimeRuler = new DrawingPanel {
+      Height = 32,
+      BackColor = Color.FromArgb(45, 45, 45),
+      ForeColor = Color.Gainsboro
+    };
+    panTimeRuler.Paint += DrawTimeRuler;
+    Controls.Add(panTimeRuler);
 
     imageList1.ColorDepth = ColorDepth.Depth32Bit;
     imageList1.ImageSize = new Size(30, 30);
@@ -393,12 +409,14 @@ public partial class FrmMain : Form
     {
       lblPlayhead.Left = trackManager.GetPlayheadPos();
     }
+    panTimeRuler.Invalidate();
   }
 
   private void trkDrawTimescale_Scroll(object sender, EventArgs e)
   {
-    trackManager.DrawTimescale = trkDrawTimescale.Maximum - trkDrawTimescale.Value;
+    trackManager.DrawTimescale = Math.Max(1, trkDrawTimescale.Maximum - trkDrawTimescale.Value);
     trackManager.RedrawAll();
+    panTimeRuler.Invalidate();
   }
   // Helper methods
   private Panel CreateTrackPanel(Track track) {
@@ -468,25 +486,33 @@ public partial class FrmMain : Form
   {
     if (trackManager is null) { return; } // bug fix
     const int PADDING = 15;
+    int contentWidth = Math.Max(1, ClientSize.Width - (PADDING * 2));
 
-    panTracks.Left = PADDING;
-    panTracks.Width = ClientSize.Width - (PADDING * 2);
+    trkDrawTimescale.Width = contentWidth;
+    trkDrawTimescale.Left = PADDING;
+
+    int rulerTop = trkDrawTimescale.Bottom + 4;
+    panTimeRuler.SetBounds(PADDING, rulerTop, contentWidth, 32);
+
+    int tracksTop = panTimeRuler.Bottom + 4;
+    int tracksBottom = buttonDrums.Top - 35;
+    panTracks.SetBounds(PADDING, tracksTop, contentWidth, Math.Max(1, tracksBottom - tracksTop));
 
     int top = 0;
+    int trackCount = trackManager.Tracks.Count;
     foreach (Track track in trackManager.Tracks)
     {
       track.PanDrawSamples.Left = 0;
       track.PanDrawSamples.Width = panTracks.Width;
-      track.PanDrawSamples.Height = (panTracks.Height / trackManager.Tracks.Count) - 1;
+      track.PanDrawSamples.Height = trackCount > 0 ? (panTracks.Height / trackCount) - 1 : 0;
       track.PanDrawSamples.Top = top;
       track.PanDrawSamples.Invalidate();
       top += track.PanDrawSamples.Height;
     }
-    trkDrawTimescale.Width = panTracks.Width;
-    trkDrawTimescale.Left = PADDING;
     lblPlayhead.Left = 0;
     lblPlayhead.Height = panTracks.Height;
     lblPlayhead.BringToFront();
+    panTimeRuler.BringToFront();
 
     int gap = 14;
     int rowWidth = buttonDrums.Width + buttonGuitar.Width +
@@ -511,6 +537,74 @@ public partial class FrmMain : Form
     buttonReset.Location = new Point(toolbarLeft + btnPlay.Width + toolbarGap, toolbarTop);
     buttonRecord.Location = new Point(toolbarLeft + btnPlay.Width + buttonReset.Width + toolbarGap * 2, toolbarTop);
     buttonTrim.Location = new Point(toolbarLeft + btnPlay.Width + buttonReset.Width + buttonRecord.Width + toolbarGap * 3, toolbarTop);
+  }
+
+  private void DrawTimeRuler(object sender, PaintEventArgs e) {
+    if (trackManager is null || panTimeRuler.Width < 20) {
+      return;
+    }
+
+    Track referenceTrack = trackManager.Tracks.FirstOrDefault();
+    int valuesPerSecond = referenceTrack?.SampleValuesPerSecond ?? 44100;
+    int drawTimescale = Math.Max(1, trackManager.DrawTimescale);
+    double pixelsPerSecond = (double)valuesPerSecond / drawTimescale;
+
+    double[] intervals = { 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600 };
+    double majorStep = intervals[^1];
+
+    foreach (double interval in intervals) {
+      if (interval * pixelsPerSecond >= 90 * DeviceDpi / 96.0) {
+        majorStep = interval;
+        break;
+      }
+    }
+
+    double minorStep = majorStep / 5;
+    int bottom = panTimeRuler.Height - 1;
+
+    using Pen rulerPen = new(panTimeRuler.ForeColor);
+    e.Graphics.DrawLine(rulerPen, 0, bottom, panTimeRuler.Width, bottom);
+
+    for (int i = 0; ; i++) {
+      double seconds = i * minorStep;
+      float x = (float)(seconds * pixelsPerSecond);
+      if (x >= panTimeRuler.Width) {
+        break;
+      }
+
+      bool major = i % 5 == 0;
+      e.Graphics.DrawLine(rulerPen, x, bottom, x, bottom - (major ? 12 : 6));
+
+      if (!major) {
+        continue;
+      }
+
+      TimeSpan time = TimeSpan.FromSeconds(Math.Round(seconds, 3));
+      string label = time.TotalHours >= 1
+        ? ((int)time.TotalHours) + time.ToString(@"\:mm\:ss")
+        : time.ToString(@"m\:ss");
+
+      if (majorStep < 1) {
+        label += time.ToString(@"\.fff");
+      }
+
+      Size textSize = TextRenderer.MeasureText(label, panTimeRuler.Font, Size.Empty, TextFormatFlags.NoPadding);
+      int labelX = Math.Max(0, (int)x - textSize.Width / 2);
+      if (labelX + textSize.Width <= panTimeRuler.Width) {
+        TextRenderer.DrawText(e.Graphics, label, panTimeRuler.Font, new Point(labelX, 2), panTimeRuler.ForeColor, TextFormatFlags.NoPadding);
+      }
+    }
+
+    if (lblPlayhead.Visible) {
+      int markerX = lblPlayhead.Left;
+      int arrowSize = 7 * DeviceDpi / 96;
+      Point[] arrow = {
+        new Point(markerX - arrowSize, bottom - arrowSize),
+        new Point(markerX + arrowSize, bottom - arrowSize),
+        new Point(markerX, bottom)
+      };
+      e.Graphics.FillPolygon(Brushes.DodgerBlue, arrow);
+    }
   }
 
   private void flpInstruments_Paint(object sender, PaintEventArgs e)
@@ -606,4 +700,5 @@ public partial class FrmMain : Form
     UpdateSizes();
   }
 }
+
 
