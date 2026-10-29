@@ -147,12 +147,19 @@ public class TrackManager {
         SelectedTrack = null;
     }
 
-    public void PlayAll() {
-        CombineTracks();
-        pseudoCombinedTrack.Play();
+  public void PlayAll()
+  {
+    if (pseudoCombinedTrack?.State == PlaybackState.Paused)
+    {
+      pseudoCombinedTrack.Resume();
+      return;
     }
 
-    private void CombineTracks() {
+    CombineTracks();
+    pseudoCombinedTrack.Play();
+  }
+
+  private void CombineTracks() {
         pseudoCombinedTrack?.Dispose();
         List<float> combinedSamples = new();
 

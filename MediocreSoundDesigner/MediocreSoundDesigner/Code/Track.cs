@@ -37,7 +37,7 @@ public class Track : IDisposable
     public float Volume { get; private set; }
     public System.Drawing.Color TrackColor { get; private set; } = System.Drawing.Color.Empty;
     public string DisplayName { get; private set; }
-    private string tempFilePath => Path.Combine(Path.GetTempPath(), "MediocreSoundDesigner", "temp.wav");
+    private readonly string tempFilePath = Path.Combine(Path.GetTempPath(), "MediocreSoundDesigner", $"{Guid.NewGuid():N}.wav");
     public PlaybackState State => outputDevice?.PlaybackState ?? PlaybackState.Stopped;
     public WaveFormat Format => fileReader?.WaveFormat ?? overrideFormat ?? new WaveFormat(); 
     public int SampleValuesPerSecond {
@@ -94,6 +94,10 @@ public class Track : IDisposable
     Volume = data.Volume;
     DrawOffset = data.DrawOffset;
     IsDisabled = data.IsDisabled;
+    DisplayName = string.IsNullOrWhiteSpace(data.DisplayName) ? "Generated Track" : data.DisplayName;
+    TrackColor = data.TrackColorArgb.HasValue
+      ? System.Drawing.Color.FromArgb(data.TrackColorArgb.Value)
+      : System.Drawing.Color.Empty;
 
     if (sampleRate > 0 && channels > 0) {
         duration = TimeSpan.FromSeconds((double)samples.Length / sampleRate / channels);
@@ -108,7 +112,12 @@ public class Track : IDisposable
       this.PanDrawSamples = panDrawSamples;
       this.panContainer = panContainer;
   }
-  
+
+  public void SetDisplayName(string name)
+  {
+    DisplayName = name;
+    PanDrawSamples?.Invalidate();
+  }
 
   // edits
   public float[] CloneSamples() {
@@ -327,7 +336,9 @@ public class Track : IDisposable
         Channels = channels,
         Volume = Volume,
         DrawOffset = DrawOffset,
-        IsDisabled = IsDisabled
+        IsDisabled = IsDisabled,
+        DisplayName = DisplayName,
+        TrackColorArgb = TrackColor.IsEmpty ? null : TrackColor.ToArgb(),
     };
   }
 
@@ -401,49 +412,64 @@ public class Track : IDisposable
         DrawOffset += amount;
         DrawOffset = Math.Max(0, DrawOffset);
     }
-    public void DrawSamples(Graphics g, int drawTimescale)
+    public void DrawSamples(Graphics g, int drawTimescale, int horizontalScrollOffset = 0)
     {
-        if (PanDrawSamples is null)
+      if (PanDrawSamples is null)
+      {
+        return;
+      }
+
+      this.drawTimescale = drawTimescale;
+      float heightAdj = PanDrawSamples.Height / 2;
+
+      if (samples != null && samples.Length > 0)
+      {
+        int x = DrawOffset;
+        Pen pen = new(IsDisabled ? Settings.Color.TrackSamples_Disabled : Settings.Color.TrackSamples_Enabled);
+        List<Point> points = new();
+
+        for (int s = 0; s < samples.Length; s += drawTimescale)
         {
-            return;
+          var sample = (int)(samples[s] * heightAdj * Volume);
+          points.Add(new(x, PanDrawSamples.Height / 2));
+          points.Add(new(x, PanDrawSamples.Height / 2 - sample));
+          x++;
         }
 
-    this.drawTimescale = drawTimescale;
-    float heightAdj = PanDrawSamples.Height / 2;
-    if (samples != null && samples.Length > 0) {
-      int x = DrawOffset;
-      Pen pen = new(IsDisabled ? Settings.Color.TrackSamples_Disabled : Settings.Color.TrackSamples_Enabled);
-      List<Point> points = new();
-      for (int s = 0; s < samples.Length; s += drawTimescale) {
-        var sample = (int)(samples[s] * heightAdj * Volume);
-        points.Add(new(x, PanDrawSamples.Height / 2));
-        points.Add(new(x, PanDrawSamples.Height / 2 - sample));
-        x++;
+        g.DrawLines(pen, points.ToArray());
+        pen.Dispose();
       }
-      g.DrawLines(pen, points.ToArray());
-      pen.Dispose();
+
+      System.Drawing.Color trackColor = PanDrawSamples.BackColor;
+      System.Drawing.Color headerColor = System.Drawing.Color.FromArgb(
+        (int)(trackColor.R * 0.90),
+        (int)(trackColor.G * 0.90),
+        (int)(trackColor.B * 0.90)
+      );
+
+      using SolidBrush headerBrush = new(headerColor);
+      using Pen divider = new(System.Drawing.Color.FromArgb(70, 0, 0, 0));
+      using System.Drawing.Font nameFont = new("Arial", 10f, System.Drawing.FontStyle.Bold);
+
+      int headerX = horizontalScrollOffset;
+      int headerWidth = PanDrawSamples.Width + horizontalScrollOffset;
+
+      g.FillRectangle(headerBrush, headerX, 0, headerWidth, 30);
+      g.DrawLine(divider, headerX, 29, headerWidth, 29);
+
+      TextRenderer.DrawText(
+        g,
+        DisplayName,
+        nameFont,
+        new Rectangle(headerX + 10, 0, Math.Max(0, PanDrawSamples.Width - 20), 30),
+        System.Drawing.Color.Black,
+        TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
-    System.Drawing.Color trackColor = PanDrawSamples.BackColor;
-    System.Drawing.Color headerColor = System.Drawing.Color.FromArgb(
-      (int)(trackColor.R * 0.90),
-      (int)(trackColor.G * 0.90),
-      (int)(trackColor.B * 0.90)
-    );
-    using SolidBrush headerBrush = new(headerColor);
-    g.FillRectangle(headerBrush, 0, 0, PanDrawSamples.Width, 30);
-
-    using Pen divider = new(System.Drawing.Color.FromArgb(70, 0, 0, 0));
-    g.DrawLine(divider, 0, 29, PanDrawSamples.Width, 29);
-
-    using System.Drawing.Font nameFont = new("Arial", 10f, System.Drawing.FontStyle.Bold);
-    TextRenderer.DrawText(g, DisplayName, nameFont, new Rectangle(10, 0, Math.Max(0, PanDrawSamples.Width - 20), 30), System.Drawing.Color.Black, TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-  }
-
     // dispose
     public void Dispose()
-    {
-        outputDevice?.Dispose();
-        fileReader?.Dispose();
-    }
+      {
+          outputDevice?.Dispose();
+          fileReader?.Dispose();
+      }
 }
 

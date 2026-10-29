@@ -43,7 +43,6 @@ namespace MediocreSoundDesigner
       saveAsToolStripMenuItem = new ToolStripMenuItem();
       menuFileOpen = new ToolStripMenuItem();
       menuFileSave = new ToolStripMenuItem();
-      menuFileSettings = new ToolStripMenuItem();
       menuEdit = new ToolStripMenuItem();
       menuEditFlip = new ToolStripMenuItem();
       menuEditReverse = new ToolStripMenuItem();
@@ -65,6 +64,8 @@ namespace MediocreSoundDesigner
       lbInstPanel = new TextBox();
       imageList1 = new ImageList(components);
       buttonReset = new Button();
+      buttonDeleteSelection = new Button();
+      buttonImport = new Button();
       panTracks.SuspendLayout();
       menu.SuspendLayout();
       ((System.ComponentModel.ISupportInitialize)trkDrawTimescale).BeginInit();
@@ -136,61 +137,54 @@ namespace MediocreSoundDesigner
       // 
       // menuFile
       // 
-      menuFile.DropDownItems.AddRange(new ToolStripItem[] { newToolStripMenuItem, openToolStripMenuItem, saveToolStripMenuItem, saveAsToolStripMenuItem, menuFileOpen, menuFileSave, menuFileSettings });
+      menuFile.DropDownItems.AddRange(new ToolStripItem[] { newToolStripMenuItem, openToolStripMenuItem, saveToolStripMenuItem, saveAsToolStripMenuItem, menuFileOpen, menuFileSave });
       menuFile.Name = "menuFile";
       menuFile.Size = new Size(46, 24);
       menuFile.Text = "&File";
-      //
+      // 
       // newToolStripMenuItem
-      //
+      // 
       newToolStripMenuItem.Name = "newToolStripMenuItem";
-      newToolStripMenuItem.Size = new Size(224, 26);
+      newToolStripMenuItem.Size = new Size(240, 26);
       newToolStripMenuItem.Text = "New";
       newToolStripMenuItem.Click += menuFileNewProject_Click;
-      //
+      // 
       // openToolStripMenuItem
-      //
+      // 
       openToolStripMenuItem.Name = "openToolStripMenuItem";
       openToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.O;
-      openToolStripMenuItem.Size = new Size(224, 26);
+      openToolStripMenuItem.Size = new Size(240, 26);
       openToolStripMenuItem.Text = "Open Project...";
       openToolStripMenuItem.Click += openToolStripMenuItem_Click;
-      //
+      // 
       // saveToolStripMenuItem
-      //
+      // 
       saveToolStripMenuItem.Name = "saveToolStripMenuItem";
       saveToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.S;
-      saveToolStripMenuItem.Size = new Size(224, 26);
+      saveToolStripMenuItem.Size = new Size(240, 26);
       saveToolStripMenuItem.Text = "Save Project";
       saveToolStripMenuItem.Click += saveToolStripMenuItem_Click;
-      //
+      // 
       // saveAsToolStripMenuItem
-      //
+      // 
       saveAsToolStripMenuItem.Name = "saveAsToolStripMenuItem";
-      saveAsToolStripMenuItem.Size = new Size(224, 26);
+      saveAsToolStripMenuItem.Size = new Size(240, 26);
       saveAsToolStripMenuItem.Text = "Save Project As...";
       saveAsToolStripMenuItem.Click += saveAsToolStripMenuItem_Click;
-      //
+      // 
       // menuFileOpen
       // 
       menuFileOpen.Name = "menuFileOpen";
-      menuFileOpen.Size = new Size(154, 26);
+      menuFileOpen.Size = new Size(240, 26);
       menuFileOpen.Text = "Import...";
       menuFileOpen.Click += menuFileOpen_Click;
       // 
       // menuFileSave
       // 
       menuFileSave.Name = "menuFileSave";
-      menuFileSave.Size = new Size(154, 26);
+      menuFileSave.Size = new Size(240, 26);
       menuFileSave.Text = "Export...";
       menuFileSave.Click += menuFileSave_Click;
-      // 
-      // menuFileSettings
-      // 
-      menuFileSettings.Name = "menuFileSettings";
-      menuFileSettings.Size = new Size(154, 26);
-      menuFileSettings.Text = "Settings...";
-      menuFileSettings.Click += menuFileSettings_Click;
       // 
       // menuEdit
       // 
@@ -293,6 +287,7 @@ namespace MediocreSoundDesigner
       buttonTrim.Size = new Size(45, 45);
       buttonTrim.TabIndex = 8;
       buttonTrim.UseVisualStyleBackColor = true;
+      buttonTrim.Click += menuEditTrim_Click;
       // 
       // buttonGuitar
       // 
@@ -403,12 +398,46 @@ namespace MediocreSoundDesigner
       buttonReset.UseVisualStyleBackColor = true;
       buttonReset.Click += buttonReset_Click;
       // 
+      // buttonDeleteSelection
+      // 
+      buttonDeleteSelection.BackgroundImage = (Image)resources.GetObject("buttonDeleteSelection.BackgroundImage");
+      buttonDeleteSelection.BackgroundImageLayout = ImageLayout.Stretch;
+      buttonDeleteSelection.Enabled = false;
+      buttonDeleteSelection.FlatStyle = FlatStyle.Flat;
+      buttonDeleteSelection.Location = new Point(762, 39);
+      buttonDeleteSelection.Name = "buttonDeleteSelection";
+      buttonDeleteSelection.Size = new Size(45, 45);
+      buttonDeleteSelection.TabIndex = 18;
+      buttonDeleteSelection.UseVisualStyleBackColor = true;
+      buttonDeleteSelection.Click += menuEditDeleteSel_Click;
+      // 
+      // buttonImport
+      // 
+      buttonImport.AutoSize = true;
+      buttonImport.BackColor = Color.Transparent;
+      buttonImport.BackgroundImage = (Image)resources.GetObject("buttonImport.BackgroundImage");
+      buttonImport.BackgroundImageLayout = ImageLayout.Stretch;
+      buttonImport.FlatAppearance.BorderSize = 0;
+      buttonImport.FlatAppearance.MouseDownBackColor = Color.Transparent;
+      buttonImport.FlatAppearance.MouseOverBackColor = Color.Transparent;
+      buttonImport.FlatStyle = FlatStyle.Flat;
+      buttonImport.Font = new Font("Segoe UI", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+      buttonImport.Location = new Point(465, 44);
+      buttonImport.Margin = new Padding(3, 4, 3, 4);
+      buttonImport.Name = "buttonImport";
+      buttonImport.Size = new Size(40, 40);
+      buttonImport.TabIndex = 19;
+      buttonImport.UseVisualStyleBackColor = false;
+      buttonImport.Click += menuFileOpen_Click;
+      // 
       // FrmMain
       // 
       AutoScaleDimensions = new SizeF(8F, 20F);
       AutoScaleMode = AutoScaleMode.Font;
       BackColor = Color.Black;
       ClientSize = new Size(1833, 1044);
+      Controls.Add(buttonImport);
+      Controls.Add(buttonDeleteSelection);
       Controls.Add(buttonReset);
       Controls.Add(lbInstPanel);
       Controls.Add(buttonRecord);
@@ -459,7 +488,6 @@ namespace MediocreSoundDesigner
     private ColorDialog colorDialog;
     private ToolStripMenuItem menuEditEliminateSilence;
     private Label lblPlayhead;
-    private ToolStripMenuItem menuFileSettings;
     private ToolStripMenuItem newToolStripMenuItem;
     private ToolStripMenuItem openToolStripMenuItem;
     private ToolStripMenuItem saveToolStripMenuItem;
@@ -473,6 +501,8 @@ namespace MediocreSoundDesigner
     private TextBox lbInstPanel;
     private ImageList imageList1;
     private Button buttonReset;
+    private Button buttonDeleteSelection;
+    private Button buttonImport;
   }
 }
 

@@ -1,5 +1,4 @@
 using MediocreSoundDesigner.Properties;
-using System.Text.Json;
 using System.Drawing.Drawing2D;
 
 namespace MediocreSoundDesigner;
@@ -11,14 +10,18 @@ public partial class FrmMain : Form
   private Panel panTimeRuler;
   private string currentProjectPath;
   private ToolTip topButtonTips;
+  private ImageList smallToolbarIcons;
   private Track playbackTrack;
   private int selectionStart;
   private int selectionEnd;
   private int firstVisiblePixel;
   private int playheadPixel;
+  private HScrollBar hsbTimeline;
 
-  private sealed class DrawingPanel : Panel {
-    public DrawingPanel() {
+  private sealed class DrawingPanel : Panel
+  {
+    public DrawingPanel()
+    {
       DoubleBuffered = true;
       ResizeRedraw = true;
     }
@@ -36,6 +39,13 @@ public partial class FrmMain : Form
   {
     DoubleBuffered = true;
     trackManager = new(panTracks);
+    smallToolbarIcons = new ImageList(components)
+    {
+      ColorDepth = ColorDepth.Depth32Bit,
+      ImageSize = new Size(30, 30)
+    };
+    smallToolbarIcons.Images.Add(GetButtonIcon(buttonImport));
+    smallToolbarIcons.Images.Add(GetButtonIcon(buttonDeleteSelection));
 
     trkDrawTimescale.Minimum = 1;
     trkDrawTimescale.Maximum = 1000;
@@ -53,16 +63,24 @@ public partial class FrmMain : Form
     {
       HideMenuImageMargins(MainMenuStrip.Items);
     }
-    menuEdit.DropDownItems.Add("Trim to Selection", null, menuEditTrim_Click);
-    menuEdit.DropDownItems.Add("Delete Selection", null, menuEditDeleteSel_Click);
 
-    panTimeRuler = new DrawingPanel {
+    panTimeRuler = new DrawingPanel
+    {
       Height = 32,
       BackColor = Color.FromArgb(45, 45, 45),
       ForeColor = Color.Gainsboro
     };
     panTimeRuler.Paint += DrawTimeRuler;
     Controls.Add(panTimeRuler);
+
+    hsbTimeline = new HScrollBar
+    {
+      Minimum = 0,
+      SmallChange = 1,
+      Visible = false
+    };
+    hsbTimeline.Scroll += hsbTimeline_Scroll;
+    Controls.Add(hsbTimeline);
 
     imageList1.ColorDepth = ColorDepth.Depth32Bit;
     imageList1.ImageSize = new Size(30, 30);
@@ -139,7 +157,16 @@ public partial class FrmMain : Form
     buttonReset.ImageIndex = 8;
     buttonReset.ImageAlign = ContentAlignment.MiddleCenter;
 
-    Button[] toolbarButtons = { btnPlay, buttonReset, buttonRecord, buttonTrim };
+    buttonImport.ImageList = smallToolbarIcons;
+    buttonImport.ImageIndex = 0;
+    buttonImport.Image = null;
+    buttonImport.BackgroundImage = null;
+    buttonDeleteSelection.ImageList = smallToolbarIcons;
+    buttonDeleteSelection.ImageIndex = 1;
+    buttonDeleteSelection.Image = null;
+    buttonDeleteSelection.BackgroundImage = null;
+
+    Button[] toolbarButtons = { btnPlay, buttonReset, buttonRecord, buttonImport, buttonTrim, buttonDeleteSelection };
 
     foreach (Button button in toolbarButtons)
     {
@@ -164,13 +191,25 @@ public partial class FrmMain : Form
     };
     topButtonTips.SetToolTip(btnPlay, "Play/Pause");
     topButtonTips.SetToolTip(buttonRecord, "Record");
+    topButtonTips.SetToolTip(buttonImport, "Import Audio");
     topButtonTips.SetToolTip(buttonTrim, "Trim");
+    topButtonTips.SetToolTip(buttonDeleteSelection, "Delete Selection");
     topButtonTips.SetToolTip(buttonReset, "Reset to the start");
 
     tmrUpdate.Interval = 30;
     UpdateSizes();
     ApplySettings();
   }
+
+  private static Image GetButtonIcon(Button button)
+  {
+    if (button.Image is not null) return button.Image;
+    if (button.BackgroundImage is not null) return button.BackgroundImage;
+    if (button.ImageList is not null && button.ImageIndex >= 0 && button.ImageIndex < button.ImageList.Images.Count)
+      return button.ImageList.Images[button.ImageIndex];
+    throw new InvalidOperationException($"The {button.Name} button has no icon assigned.");
+  }
+
   private void ApplySettings()
   {
     BackColor = Settings.Color.WinBg;
@@ -231,11 +270,33 @@ public partial class FrmMain : Form
       currentProjectPath = path;
       return true;
     }
-    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+    catch (Exception ex)
     {
-      MessageBox.Show($"Could not save the project:\n{ex.Message}", "Save Project", MessageBoxButtons.OK, MessageBoxIcon.Error);
+      ShowOperationError("save the project", ex);
       return false;
     }
+  }
+
+  private void ShowOperationError(string operation, Exception ex)
+  {
+    MessageBox.Show(this, $"Could not {operation}.\n\n{ex.Message}", "Mediocre Sound Designer", MessageBoxButtons.OK, MessageBoxIcon.Error);
+  }
+
+  private bool ConfirmSaveBeforeReplacingProject()
+  {
+    if (trackManager.Tracks.Count == 0) return true;
+
+    DialogResult choice = MessageBox.Show(
+      this,
+      "Save the current project before replacing it?",
+      "Replace Project",
+      MessageBoxButtons.YesNoCancel,
+      MessageBoxIcon.Question);
+
+    if (choice == DialogResult.Cancel) return false;
+    if (choice == DialogResult.Yes) return SaveCurrentProject(false);
+
+    return true;
   }
 
   private void FrmMain_SizeChanged(object sender, EventArgs e)
@@ -244,24 +305,17 @@ public partial class FrmMain : Form
   }
   private void btnPlay_Click(object sender, EventArgs e)
   {
-    Track selected = GetSelectedTrack();
-    if (selected is null) return;
+    if (trackManager.Tracks.Count == 0) return;
 
-    if (playbackTrack is not null && playbackTrack != selected)
+    if (trackManager.State == NAudio.Wave.PlaybackState.Playing)
     {
-      playbackTrack.Pause();
-      playbackTrack = null;
-    }
-
-    playbackTrack ??= selected;
-    if (playbackTrack.State == NAudio.Wave.PlaybackState.Playing)
-    {
-      playbackTrack.Pause();
+      trackManager.PauseAll();
     }
     else
     {
-      playbackTrack.Play();
+      trackManager.PlayAll();
     }
+
     UpdatePlaybackView();
   }
 
@@ -270,49 +324,65 @@ public partial class FrmMain : Form
     ofdLoadFile.DefaultExt = "wav";
     if (ofdLoadFile.ShowDialog() == DialogResult.OK)
     {
-      Track newTrack = new(ofdLoadFile.FileName);
-      CreateTrackPanel(newTrack);
-      trackManager.AddTrack(newTrack);
-      SelectTrack(newTrack);
-      UpdateSizes();
-      newTrack.PanDrawSamples.Invalidate();
+      try
+      {
+        Track newTrack = new(ofdLoadFile.FileName);
+        CreateTrackPanel(newTrack);
+        trackManager.AddTrack(newTrack);
+        SelectTrack(newTrack);
+        UpdateSizes();
+        newTrack.PanDrawSamples.Invalidate();
+      }
+      catch (Exception ex)
+      {
+        ShowOperationError("import the audio file", ex);
+      }
     }
   }
-    private void menuFileSave_Click(object sender, EventArgs e) {
-        if (trackManager.Tracks.Count == 0 || trackManager.Tracks.All(t => t.IsDisabled)) {
-            MessageBox.Show("There are no enabled tracks to export.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        sfdSaveFile.Filter = "WAV Audio (*.wav)|*.wav|MP3 Audio (*.mp3)|*.mp3";
-        sfdSaveFile.DefaultExt = "wav";
-        sfdSaveFile.AddExtension = true;
-        if (sfdSaveFile.ShowDialog() != DialogResult.OK) {
-            return;
-        }
-
-        string ext = sfdSaveFile.FilterIndex == 2 ? ".mp3" : ".wav";
-        string path = sfdSaveFile.FileName;
-        string current = Path.GetExtension(path);
-        if (current.Equals(".wav", StringComparison.OrdinalIgnoreCase) || current.Equals(".mp3", StringComparison.OrdinalIgnoreCase)){
-            path = Path.ChangeExtension(path, ext);
-        }
-        else if (!path.EndsWith(ext, StringComparison.OrdinalIgnoreCase)) {
-            path += ext;
-        }
-
-        try {
-            Cursor = Cursors.WaitCursor;
-            trackManager.SaveToFile(path);
-        }
-        catch (Exception ex) {
-            MessageBox.Show($"Could not export the file:\n{ex.Message}", "Export", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-        finally {
-            Cursor = Cursors.Default;
-        }
+  private void menuFileSave_Click(object sender, EventArgs e)
+  {
+    if (trackManager.Tracks.Count == 0 || trackManager.Tracks.All(t => t.IsDisabled))
+    {
+      MessageBox.Show("There are no enabled tracks to export.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Information);
+      return;
     }
-    private void menuFileSettings_Click(object sender, EventArgs e) {
+
+    sfdSaveFile.Filter = "WAV Audio (*.wav)|*.wav|MP3 Audio (*.mp3)|*.mp3";
+    sfdSaveFile.DefaultExt = "wav";
+    sfdSaveFile.AddExtension = true;
+    if (sfdSaveFile.ShowDialog() != DialogResult.OK)
+    {
+      return;
+    }
+
+    string ext = sfdSaveFile.FilterIndex == 2 ? ".mp3" : ".wav";
+    string path = sfdSaveFile.FileName;
+    string current = Path.GetExtension(path);
+    if (current.Equals(".wav", StringComparison.OrdinalIgnoreCase) || current.Equals(".mp3", StringComparison.OrdinalIgnoreCase))
+    {
+      path = Path.ChangeExtension(path, ext);
+    }
+    else if (!path.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+    {
+      path += ext;
+    }
+
+    try
+    {
+      Cursor = Cursors.WaitCursor;
+      trackManager.SaveToFile(path);
+    }
+    catch (Exception ex)
+    {
+      ShowOperationError("export the audio file", ex);
+    }
+    finally
+    {
+      Cursor = Cursors.Default;
+    }
+  }
+  private void menuFileSettings_Click(object sender, EventArgs e)
+  {
     FrmEditSettings frm = new();
     frm.SetSound(trackManager.SelectedTrack);
     if (frm.ShowDialog() == DialogResult.OK)
@@ -348,22 +418,33 @@ public partial class FrmMain : Form
     }
   }
 
+  private int GetNextRecordingNumber()
+  {
+    int number = 1;
+    while (trackManager.Tracks.Any(track => track.DisplayName == $"Recording {number}"))
+    {
+      number++;
+    }
+    return number;
+  }
+
   private void menuGenRecord_Click(object sender, EventArgs e)
   {
     Track newTrack = new(new float[0]);
+
+    using FrmGenRecord frm = new();
+    frm.SetSound(newTrack);
+
+    if (frm.ShowDialog(this) != DialogResult.OK) return;
+
+    newTrack.SetDisplayName($"Recording {GetNextRecordingNumber()}");
     CreateTrackPanel(newTrack);
     trackManager.AddTrack(newTrack);
     SelectTrack(newTrack);
     UpdateSizes();
     newTrack.PanDrawSamples.Invalidate();
-
-    FrmGenRecord frm = new();
-    frm.SetSound(trackManager.SelectedTrack);
-    if (frm.ShowDialog() == DialogResult.Cancel)
-    {
-      trackManager.RemTrack(newTrack);
-    }
   }
+
   private void menuGenNoise_Click(object sender, EventArgs e)
   {
     const int NUM_SAMPLES = 100_000;
@@ -442,6 +523,7 @@ public partial class FrmMain : Form
       SelectTrack(track);
       selectionStart = selectionEnd = e.X + firstVisiblePixel;
       pan.Invalidate();
+      UpdatePlaybackView();
     };
     pan.MouseMove += (sender, e) =>
     {
@@ -449,6 +531,7 @@ public partial class FrmMain : Form
       {
         selectionEnd = e.X + firstVisiblePixel;
         pan.Invalidate();
+        UpdatePlaybackView();
       }
     };
     pan.DoubleClick += (sender, e) =>
@@ -460,7 +543,7 @@ public partial class FrmMain : Form
     {
       GraphicsState state = e.Graphics.Save();
       e.Graphics.TranslateTransform(-firstVisiblePixel, 0);
-      track.DrawSamples(e.Graphics, trackManager.DrawTimescale);
+      track.DrawSamples(e.Graphics, trackManager.DrawTimescale, firstVisiblePixel);
       if (track == GetSelectedTrack() && selectionStart != selectionEnd)
       {
         track.ShowSelection(e.Graphics, Math.Min(selectionStart, selectionEnd), Math.Max(selectionStart, selectionEnd));
@@ -474,6 +557,14 @@ public partial class FrmMain : Form
       SelectTrack(track);
       using ColorDialog dialog = new() { Color = track.TrackColor, FullOpen = true };
       if (dialog.ShowDialog(this) == DialogResult.OK) track.SetTrackColor(dialog.Color);
+    });
+    colorMenu.Items.Add(new ToolStripSeparator());
+    colorMenu.Items.Add("Delete Track...", null, (sender, e) =>
+    {
+      if (MessageBox.Show(this, "Delete this track? This cannot be undone.", "Delete Track", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+      {
+        RemoveTrack(track);
+      }
     });
     pan.ContextMenuStrip = colorMenu;
     pan.Disposed += (sender, e) => colorMenu.Dispose();
@@ -490,7 +581,10 @@ public partial class FrmMain : Form
     {
       if (item is ToolStripMenuItem menuItem)
       {
-        menuItem.DropDown.ShowImageMargin = false;
+        if (menuItem.DropDown is ToolStripDropDownMenu dropDown)
+        {
+          dropDown.ShowImageMargin = false;
+        }
         HideMenuImageMargins(menuItem.DropDownItems);
       }
     }
@@ -505,6 +599,10 @@ public partial class FrmMain : Form
   private void SelectTrack(Track track)
   {
     if (track is null) return;
+    if (trackManager.SelectedTrack != track)
+    {
+      selectionStart = selectionEnd = 0;
+    }
     if (playbackTrack is not null && playbackTrack != track)
     {
       playbackTrack.Pause();
@@ -519,13 +617,11 @@ public partial class FrmMain : Form
   private void RemoveTrack(Track track)
   {
     if (track is null) return;
-    if (playbackTrack == track)
-    {
-      playbackTrack.Reset();
-      playbackTrack = null;
-      firstVisiblePixel = 0;
-      playheadPixel = 0;
-    }
+    trackManager.ResetAll();
+    playbackTrack = null;
+    firstVisiblePixel = 0;
+    playheadPixel = 0;
+    selectionStart = selectionEnd = 0;
     bool wasSelected = trackManager.SelectedTrack == track;
     trackManager.RemTrack(track);
     panTracks.Controls.Remove(track.PanDrawSamples);
@@ -554,40 +650,83 @@ public partial class FrmMain : Form
   private void AfterEdit(Track track)
   {
     selectionStart = selectionEnd = 0;
-    if (playbackTrack == track)
-    {
-      track.Reset();
-      playbackTrack = null;
-      firstVisiblePixel = 0;
-      playheadPixel = 0;
-    }
+    trackManager.ResetAll();
+    playbackTrack = null;
+    firstVisiblePixel = 0;
+    playheadPixel = 0;
     track.PanDrawSamples.Invalidate();
     UpdatePlaybackView();
   }
 
   private void UpdatePlaybackView()
   {
-    if (trackManager is null || panTimeRuler is null) return;
+    if (trackManager is null || panTimeRuler is null || hsbTimeline is null) return;
     bool hasTracks = trackManager.Tracks.Count > 0;
+    bool hasSelection = hasTracks && GetSelectedTrack() is not null && selectionStart != selectionEnd;
     btnPlay.Enabled = hasTracks;
     buttonReset.Enabled = hasTracks;
-    btnPlay.Visible = hasTracks;
+    buttonTrim.Enabled = hasSelection;
+    buttonDeleteSelection.Enabled = hasSelection;
+    btnPlay.Visible = true;
     lblPlayhead.Visible = hasTracks;
-    btnPlay.ImageIndex = playbackTrack?.State == NAudio.Wave.PlaybackState.Playing ? 5 : 4;
-    topButtonTips.SetToolTip(btnPlay, playbackTrack?.State == NAudio.Wave.PlaybackState.Playing ? "Pause" : "Play");
+    bool isPlaying = trackManager.State == NAudio.Wave.PlaybackState.Playing;
+    btnPlay.ImageIndex = isPlaying ? 5 : 4;
+    topButtonTips.SetToolTip(btnPlay, isPlaying ? "Pause" : "Play");
 
+    UpdateTimelineScrollBar();
     if (hasTracks)
     {
-      playheadPixel = (playbackTrack?.GetPlayheadPos() ?? 0) / Math.Max(1, trackManager.DrawTimescale);
+      playheadPixel = trackManager.GetPlayheadPos();
       int visibleWidth = Math.Max(1, panTracks.ClientSize.Width - 20);
       int oldStart = firstVisiblePixel;
-      if (playheadPixel < visibleWidth || playheadPixel < firstVisiblePixel) firstVisiblePixel = 0;
-      if (playheadPixel >= firstVisiblePixel + visibleWidth) firstVisiblePixel = Math.Max(0, playheadPixel - visibleWidth / 4);
+
+      // Follow playback automatically, but let the user scroll freely while paused or stopped.
+      if (isPlaying)
+      {
+        if (playheadPixel < visibleWidth) firstVisiblePixel = 0;
+        else if (playheadPixel >= firstVisiblePixel + visibleWidth)
+          firstVisiblePixel = Math.Max(0, playheadPixel - visibleWidth / 4);
+      }
+
+      UpdateTimelineScrollBar();
       if (oldStart != firstVisiblePixel) trackManager.RedrawAll();
       lblPlayhead.Left = playheadPixel - firstVisiblePixel;
       lblPlayhead.BringToFront();
     }
     panTimeRuler.Invalidate();
+  }
+
+  private void hsbTimeline_Scroll(object sender, ScrollEventArgs e)
+  {
+    firstVisiblePixel = hsbTimeline.Value;
+    trackManager.RedrawAll();
+    panTimeRuler.Invalidate();
+    UpdatePlaybackView();
+  }
+
+  private void UpdateTimelineScrollBar()
+  {
+    if (hsbTimeline is null || trackManager is null || panTracks is null) return;
+
+    int visibleWidth = Math.Max(1, panTracks.ClientSize.Width);
+    int scale = Math.Max(1, trackManager.DrawTimescale);
+    int contentWidth = 0;
+
+    foreach (Track track in trackManager.Tracks)
+    {
+      int trackWidth = track.DrawOffset +
+        (int)Math.Ceiling(track.GetDurationSeconds() * track.SampleValuesPerSecond / scale);
+      contentWidth = Math.Max(contentWidth, trackWidth);
+    }
+
+    int maxScroll = Math.Max(0, contentWidth - visibleWidth);
+    hsbTimeline.LargeChange = visibleWidth;
+    hsbTimeline.SmallChange = Math.Max(1, visibleWidth / 20);
+    hsbTimeline.Maximum = maxScroll + visibleWidth - 1;
+    hsbTimeline.Visible = maxScroll > 0;
+
+    firstVisiblePixel = Math.Clamp(firstVisiblePixel, 0, maxScroll);
+    hsbTimeline.Value = firstVisiblePixel;
   }
 
   private void RebuildTrackPanels()
@@ -611,14 +750,31 @@ public partial class FrmMain : Form
 
     int padding = 15 * DeviceDpi / 96;
     int contentWidth = Math.Max(1, ClientSize.Width - padding * 2);
+
+    int gap = 14;
+    int rowWidth = buttonDrums.Width + buttonGuitar.Width + buttonPiano.Width + buttonSynth.Width + gap * 3;
+    int left = (ClientSize.Width - rowWidth) / 2;
+    int instrumentsY = Math.Min(935 * DeviceDpi / 96, ClientSize.Height - buttonDrums.Height - 20 * DeviceDpi / 96);
+
+    lbInstPanel.Size = new Size(rowWidth, 24 * DeviceDpi / 96);
+    lbInstPanel.Location = new Point(left, instrumentsY - lbInstPanel.Height - 10 * DeviceDpi / 96);
+    buttonDrums.Location = new Point(left, instrumentsY);
+    buttonGuitar.Location = new Point(left + buttonDrums.Width + gap, instrumentsY);
+    buttonPiano.Location = new Point(left + buttonDrums.Width + buttonGuitar.Width + gap * 2, instrumentsY);
+    buttonSynth.Location = new Point(left + buttonDrums.Width + buttonGuitar.Width + buttonPiano.Width + gap * 3, instrumentsY);
+
     trkDrawTimescale.Left = padding;
     trkDrawTimescale.Width = contentWidth;
 
     int rulerTop = trkDrawTimescale.Bottom + 4;
     panTimeRuler.SetBounds(padding, rulerTop, contentWidth, 32 * DeviceDpi / 96);
+
     int tracksTop = panTimeRuler.Bottom + 4;
-    int tracksBottom = buttonDrums.Top - 35;
+    int scrollbarHeight = SystemInformation.HorizontalScrollBarHeight;
+    int scrollbarGap = 3 * DeviceDpi / 96;
+    int tracksBottom = lbInstPanel.Top - scrollbarHeight - scrollbarGap;
     panTracks.SetBounds(padding, tracksTop, contentWidth, Math.Max(1, tracksBottom - tracksTop));
+    hsbTimeline.SetBounds(padding, tracksBottom + scrollbarGap, contentWidth, scrollbarHeight);
 
     int count = trackManager.Tracks.Count;
     for (int i = 0; i < count; i++)
@@ -634,26 +790,20 @@ public partial class FrmMain : Form
     lblPlayhead.BringToFront();
     panTimeRuler.BringToFront();
     trkDrawTimescale.BringToFront();
-
-    int gap = 14;
-    int rowWidth = buttonDrums.Width + buttonGuitar.Width + buttonPiano.Width + buttonSynth.Width + gap * 3;
-    int left = (ClientSize.Width - rowWidth) / 2;
-    int instrumentsY = Math.Min(935 * DeviceDpi / 96, ClientSize.Height - buttonDrums.Height - 20 * DeviceDpi / 96);
-    lbInstPanel.Size = new Size(rowWidth, 24 * DeviceDpi / 96);
-    lbInstPanel.Location = new Point(left, instrumentsY - lbInstPanel.Height - 10 * DeviceDpi / 96);
-    buttonDrums.Location = new Point(left, instrumentsY);
-    buttonGuitar.Location = new Point(left + buttonDrums.Width + gap, instrumentsY);
-    buttonPiano.Location = new Point(left + buttonDrums.Width + buttonGuitar.Width + gap * 2, instrumentsY);
-    buttonSynth.Location = new Point(left + buttonDrums.Width + buttonGuitar.Width + buttonPiano.Width + gap * 3, instrumentsY);
+    hsbTimeline.BringToFront();
 
     int toolbarGap = 10;
-    int toolbarWidth = btnPlay.Width + buttonReset.Width + buttonRecord.Width + buttonTrim.Width + toolbarGap * 3;
+    Button[] toolbarButtons = { btnPlay, buttonReset, buttonRecord, buttonImport, buttonTrim, buttonDeleteSelection };
+    int toolbarWidth = toolbarButtons.Sum(button => button.Width) + toolbarGap * (toolbarButtons.Length - 1);
     int toolbarLeft = (ClientSize.Width - toolbarWidth) / 2;
     int toolbarTop = 39 * DeviceDpi / 96;
-    btnPlay.Location = new Point(toolbarLeft, toolbarTop);
-    buttonReset.Location = new Point(toolbarLeft + btnPlay.Width + toolbarGap, toolbarTop);
-    buttonRecord.Location = new Point(toolbarLeft + btnPlay.Width + buttonReset.Width + toolbarGap * 2, toolbarTop);
-    buttonTrim.Location = new Point(toolbarLeft + btnPlay.Width + buttonReset.Width + buttonRecord.Width + toolbarGap * 3, toolbarTop);
+    int toolbarX = toolbarLeft;
+    foreach (Button button in toolbarButtons)
+    {
+      button.Location = new Point(toolbarX, toolbarTop);
+      toolbarX += button.Width + toolbarGap;
+    }
+
     UpdatePlaybackView();
   }
   private void DrawTimeRuler(object sender, PaintEventArgs e)
@@ -738,7 +888,7 @@ public partial class FrmMain : Form
   }
   private void buttonReset_Click(object sender, EventArgs e)
   {
-    (playbackTrack ?? GetSelectedTrack())?.Reset();
+    trackManager.ResetAll();
     playbackTrack = null;
     firstVisiblePixel = 0;
     playheadPixel = 0;
@@ -757,6 +907,8 @@ public partial class FrmMain : Form
 
   private void openToolStripMenuItem_Click(object sender, EventArgs e)
   {
+    if (!ConfirmSaveBeforeReplacingProject()) return;
+
     using OpenFileDialog dialog = new()
     {
       Filter = "Sound Designer Project (*.soundproj)|*.soundproj",
@@ -776,28 +928,15 @@ public partial class FrmMain : Form
       RebuildTrackPanels();
       currentProjectPath = dialog.FileName;
     }
-    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+    catch (Exception ex)
     {
-      MessageBox.Show($"Could not open the project:\n{ex.Message}", "Open Project", MessageBoxButtons.OK, MessageBoxIcon.Error);
+      ShowOperationError("open the project", ex);
     }
   }
 
   private void menuFileNewProject_Click(object sender, EventArgs e)
   {
-    if (trackManager.Tracks.Count > 0)
-    {
-      DialogResult choice = MessageBox.Show("Save the current project before starting a new one?", "New Project", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-
-      if (choice == DialogResult.Cancel)
-      {
-        return;
-      }
-
-      if (choice == DialogResult.Yes && !SaveCurrentProject(false))
-      {
-        return;
-      }
-    }
+    if (!ConfirmSaveBeforeReplacingProject()) return;
 
     playbackTrack = null;
     firstVisiblePixel = 0;
