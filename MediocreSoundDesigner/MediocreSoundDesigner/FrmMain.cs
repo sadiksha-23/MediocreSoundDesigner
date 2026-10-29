@@ -1,5 +1,4 @@
 using MediocreSoundDesigner.Properties;
-using System.Text.Json;
 using System.Drawing.Drawing2D;
 
 namespace MediocreSoundDesigner;
@@ -244,11 +243,33 @@ public partial class FrmMain : Form
       currentProjectPath = path;
       return true;
     }
-    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+    catch (Exception ex)
     {
-      MessageBox.Show($"Could not save the project:\n{ex.Message}", "Save Project", MessageBoxButtons.OK, MessageBoxIcon.Error);
+      ShowOperationError("save the project", ex);
       return false;
     }
+  }
+
+  private void ShowOperationError(string operation, Exception ex)
+  {
+    MessageBox.Show(this, $"Could not {operation}.\n\n{ex.Message}", "Mediocre Sound Designer", MessageBoxButtons.OK, MessageBoxIcon.Error);
+  }
+
+  private bool ConfirmSaveBeforeReplacingProject()
+  {
+    if (trackManager.Tracks.Count == 0) return true;
+
+    DialogResult choice = MessageBox.Show(
+      this,
+      "Save the current project before replacing it?",
+      "Replace Project",
+      MessageBoxButtons.YesNoCancel,
+      MessageBoxIcon.Question);
+
+    if (choice == DialogResult.Cancel) return false;
+    if (choice == DialogResult.Yes) return SaveCurrentProject(false);
+
+    return true;
   }
 
   private void FrmMain_SizeChanged(object sender, EventArgs e)
@@ -257,24 +278,17 @@ public partial class FrmMain : Form
   }
   private void btnPlay_Click(object sender, EventArgs e)
   {
-    Track selected = GetSelectedTrack();
-    if (selected is null) return;
+    if (trackManager.Tracks.Count == 0) return;
 
-    if (playbackTrack is not null && playbackTrack != selected)
+    if (trackManager.State == NAudio.Wave.PlaybackState.Playing)
     {
-      playbackTrack.Pause();
-      playbackTrack = null;
-    }
-
-    playbackTrack ??= selected;
-    if (playbackTrack.State == NAudio.Wave.PlaybackState.Playing)
-    {
-      playbackTrack.Pause();
+      trackManager.PauseAll();
     }
     else
     {
-      playbackTrack.Play();
+      trackManager.PlayAll();
     }
+
     UpdatePlaybackView();
   }
 
@@ -283,12 +297,19 @@ public partial class FrmMain : Form
     ofdLoadFile.DefaultExt = "wav";
     if (ofdLoadFile.ShowDialog() == DialogResult.OK)
     {
-      Track newTrack = new(ofdLoadFile.FileName);
-      CreateTrackPanel(newTrack);
-      trackManager.AddTrack(newTrack);
-      SelectTrack(newTrack);
-      UpdateSizes();
-      newTrack.PanDrawSamples.Invalidate();
+      try
+      {
+        Track newTrack = new(ofdLoadFile.FileName);
+        CreateTrackPanel(newTrack);
+        trackManager.AddTrack(newTrack);
+        SelectTrack(newTrack);
+        UpdateSizes();
+        newTrack.PanDrawSamples.Invalidate();
+      }
+      catch (Exception ex)
+      {
+        ShowOperationError("import the audio file", ex);
+      }
     }
   }
   private void menuFileSave_Click(object sender, EventArgs e)
@@ -326,7 +347,7 @@ public partial class FrmMain : Form
     }
     catch (Exception ex)
     {
-      MessageBox.Show($"Could not export the file:\n{ex.Message}", "Export", MessageBoxButtons.OK, MessageBoxIcon.Error);
+      ShowOperationError("export the audio file", ex);
     }
     finally
     {
@@ -370,22 +391,33 @@ public partial class FrmMain : Form
     }
   }
 
+  private int GetNextRecordingNumber()
+  {
+    int number = 1;
+    while (trackManager.Tracks.Any(track => track.DisplayName == $"Recording {number}"))
+    {
+      number++;
+    }
+    return number;
+  }
+
   private void menuGenRecord_Click(object sender, EventArgs e)
   {
     Track newTrack = new(new float[0]);
+
+    using FrmGenRecord frm = new();
+    frm.SetSound(newTrack);
+
+    if (frm.ShowDialog(this) != DialogResult.OK) return;
+
+    newTrack.SetDisplayName($"Recording {GetNextRecordingNumber()}");
     CreateTrackPanel(newTrack);
     trackManager.AddTrack(newTrack);
     SelectTrack(newTrack);
     UpdateSizes();
     newTrack.PanDrawSamples.Invalidate();
-
-    FrmGenRecord frm = new();
-    frm.SetSound(trackManager.SelectedTrack);
-    if (frm.ShowDialog() == DialogResult.Cancel)
-    {
-      trackManager.RemTrack(newTrack);
-    }
   }
+
   private void menuGenNoise_Click(object sender, EventArgs e)
   {
     const int NUM_SAMPLES = 100_000;
@@ -598,14 +630,14 @@ public partial class FrmMain : Form
     buttonReset.Enabled = hasTracks;
     btnPlay.Visible = true;
     lblPlayhead.Visible = hasTracks;
-    bool isPlaying = playbackTrack?.State == NAudio.Wave.PlaybackState.Playing;
+    bool isPlaying = trackManager.State == NAudio.Wave.PlaybackState.Playing;
     btnPlay.ImageIndex = isPlaying ? 5 : 4;
     topButtonTips.SetToolTip(btnPlay, isPlaying ? "Pause" : "Play");
 
     UpdateTimelineScrollBar();
     if (hasTracks)
     {
-      playheadPixel = (playbackTrack?.GetPlayheadPos() ?? 0) / Math.Max(1, trackManager.DrawTimescale);
+      playheadPixel = trackManager.GetPlayheadPos();
       int visibleWidth = Math.Max(1, panTracks.ClientSize.Width - 20);
       int oldStart = firstVisiblePixel;
 
@@ -679,17 +711,28 @@ public partial class FrmMain : Form
 
     int padding = 15 * DeviceDpi / 96;
     int contentWidth = Math.Max(1, ClientSize.Width - padding * 2);
+
+    int gap = 14;
+    int rowWidth = buttonDrums.Width + buttonGuitar.Width + buttonPiano.Width + buttonSynth.Width + gap * 3;
+    int left = (ClientSize.Width - rowWidth) / 2;
+    int instrumentsY = Math.Min(935 * DeviceDpi / 96, ClientSize.Height - buttonDrums.Height - 20 * DeviceDpi / 96);
+
+    lbInstPanel.Size = new Size(rowWidth, 24 * DeviceDpi / 96);
+    lbInstPanel.Location = new Point(left, instrumentsY - lbInstPanel.Height - 10 * DeviceDpi / 96);
+    buttonDrums.Location = new Point(left, instrumentsY);
+    buttonGuitar.Location = new Point(left + buttonDrums.Width + gap, instrumentsY);
+    buttonPiano.Location = new Point(left + buttonDrums.Width + buttonGuitar.Width + gap * 2, instrumentsY);
+    buttonSynth.Location = new Point(left + buttonDrums.Width + buttonGuitar.Width + buttonPiano.Width + gap * 3, instrumentsY);
+
     trkDrawTimescale.Left = padding;
     trkDrawTimescale.Width = contentWidth;
 
     int rulerTop = trkDrawTimescale.Bottom + 4;
     panTimeRuler.SetBounds(padding, rulerTop, contentWidth, 32 * DeviceDpi / 96);
+
     int tracksTop = panTimeRuler.Bottom + 4;
-    int scrollHeight = SystemInformation.HorizontalScrollBarHeight;
-    int tracksBottom = buttonDrums.Top - 35 - scrollHeight;
+    int tracksBottom = lbInstPanel.Top - 10 * DeviceDpi / 96;
     panTracks.SetBounds(padding, tracksTop, contentWidth, Math.Max(1, tracksBottom - tracksTop));
-    hsbTimeline.SetBounds(padding, panTracks.Bottom, contentWidth, scrollHeight);
-    hsbTimeline.BringToFront();
 
     int count = trackManager.Tracks.Count;
     for (int i = 0; i < count; i++)
@@ -706,17 +749,6 @@ public partial class FrmMain : Form
     panTimeRuler.BringToFront();
     trkDrawTimescale.BringToFront();
 
-    int gap = 14;
-    int rowWidth = buttonDrums.Width + buttonGuitar.Width + buttonPiano.Width + buttonSynth.Width + gap * 3;
-    int left = (ClientSize.Width - rowWidth) / 2;
-    int instrumentsY = Math.Min(935 * DeviceDpi / 96, ClientSize.Height - buttonDrums.Height - 20 * DeviceDpi / 96);
-    lbInstPanel.Size = new Size(rowWidth, 24 * DeviceDpi / 96);
-    lbInstPanel.Location = new Point(left, instrumentsY - lbInstPanel.Height - 10 * DeviceDpi / 96);
-    buttonDrums.Location = new Point(left, instrumentsY);
-    buttonGuitar.Location = new Point(left + buttonDrums.Width + gap, instrumentsY);
-    buttonPiano.Location = new Point(left + buttonDrums.Width + buttonGuitar.Width + gap * 2, instrumentsY);
-    buttonSynth.Location = new Point(left + buttonDrums.Width + buttonGuitar.Width + buttonPiano.Width + gap * 3, instrumentsY);
-
     int toolbarGap = 10;
     int toolbarWidth = btnPlay.Width + buttonReset.Width + buttonRecord.Width + buttonTrim.Width + toolbarGap * 3;
     int toolbarLeft = (ClientSize.Width - toolbarWidth) / 2;
@@ -725,6 +757,7 @@ public partial class FrmMain : Form
     buttonReset.Location = new Point(toolbarLeft + btnPlay.Width + toolbarGap, toolbarTop);
     buttonRecord.Location = new Point(toolbarLeft + btnPlay.Width + buttonReset.Width + toolbarGap * 2, toolbarTop);
     buttonTrim.Location = new Point(toolbarLeft + btnPlay.Width + buttonReset.Width + buttonRecord.Width + toolbarGap * 3, toolbarTop);
+
     UpdatePlaybackView();
   }
   private void DrawTimeRuler(object sender, PaintEventArgs e)
@@ -828,6 +861,8 @@ public partial class FrmMain : Form
 
   private void openToolStripMenuItem_Click(object sender, EventArgs e)
   {
+    if (!ConfirmSaveBeforeReplacingProject()) return;
+
     using OpenFileDialog dialog = new()
     {
       Filter = "Sound Designer Project (*.soundproj)|*.soundproj",
@@ -847,28 +882,15 @@ public partial class FrmMain : Form
       RebuildTrackPanels();
       currentProjectPath = dialog.FileName;
     }
-    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+    catch (Exception ex)
     {
-      MessageBox.Show($"Could not open the project:\n{ex.Message}", "Open Project", MessageBoxButtons.OK, MessageBoxIcon.Error);
+      ShowOperationError("open the project", ex);
     }
   }
 
   private void menuFileNewProject_Click(object sender, EventArgs e)
   {
-    if (trackManager.Tracks.Count > 0)
-    {
-      DialogResult choice = MessageBox.Show("Save the current project before starting a new one?", "New Project", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-
-      if (choice == DialogResult.Cancel)
-      {
-        return;
-      }
-
-      if (choice == DialogResult.Yes && !SaveCurrentProject(false))
-      {
-        return;
-      }
-    }
+    if (!ConfirmSaveBeforeReplacingProject()) return;
 
     playbackTrack = null;
     firstVisiblePixel = 0;

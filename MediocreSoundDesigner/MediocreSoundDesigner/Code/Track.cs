@@ -37,7 +37,7 @@ public class Track : IDisposable
     public float Volume { get; private set; }
     public System.Drawing.Color TrackColor { get; private set; } = System.Drawing.Color.Empty;
     public string DisplayName { get; private set; }
-    private string tempFilePath => Path.Combine(Path.GetTempPath(), "MediocreSoundDesigner", "temp.wav");
+    private readonly string tempFilePath = Path.Combine(Path.GetTempPath(), "MediocreSoundDesigner", $"{Guid.NewGuid():N}.wav");
     public PlaybackState State => outputDevice?.PlaybackState ?? PlaybackState.Stopped;
     public WaveFormat Format => fileReader?.WaveFormat ?? overrideFormat ?? new WaveFormat(); 
     public int SampleValuesPerSecond {
@@ -94,6 +94,10 @@ public class Track : IDisposable
     Volume = data.Volume;
     DrawOffset = data.DrawOffset;
     IsDisabled = data.IsDisabled;
+    DisplayName = string.IsNullOrWhiteSpace(data.DisplayName) ? "Generated Track" : data.DisplayName;
+    TrackColor = data.TrackColorArgb.HasValue
+      ? System.Drawing.Color.FromArgb(data.TrackColorArgb.Value)
+      : System.Drawing.Color.Empty;
 
     if (sampleRate > 0 && channels > 0) {
         duration = TimeSpan.FromSeconds((double)samples.Length / sampleRate / channels);
@@ -108,7 +112,12 @@ public class Track : IDisposable
       this.PanDrawSamples = panDrawSamples;
       this.panContainer = panContainer;
   }
-  
+
+  public void SetDisplayName(string name)
+  {
+    DisplayName = name;
+    PanDrawSamples?.Invalidate();
+  }
 
   // edits
   public float[] CloneSamples() {
@@ -327,7 +336,9 @@ public class Track : IDisposable
         Channels = channels,
         Volume = Volume,
         DrawOffset = DrawOffset,
-        IsDisabled = IsDisabled
+        IsDisabled = IsDisabled,
+        DisplayName = DisplayName,
+        TrackColorArgb = TrackColor.IsEmpty ? null : TrackColor.ToArgb(),
     };
   }
 
