@@ -136,6 +136,40 @@ public class Track : IDisposable
   public void Trim() {
   }
 
+  // Keep only the audio between two timeline pixel positions.
+  public void Trim(int startPx, int endPx, int scale) {
+    if (scale <= 0 || channels <= 0 || samples is null) return;
+
+    int start = Math.Clamp((startPx - DrawOffset) * scale, 0, samples.Length);
+    int end = Math.Clamp((endPx - DrawOffset) * scale, 0, samples.Length);
+    start -= start % channels;
+    end -= end % channels;
+    if (end <= start) return;
+
+    samples = samples[start..end];
+    DrawOffset = Math.Max(DrawOffset, startPx);
+  }
+
+  // Remove the audio between two timeline pixel positions.
+  public void DeletePart(int startPx, int endPx, int scale) {
+    if (scale <= 0 || channels <= 0 || samples is null) return;
+
+    int start = Math.Clamp((startPx - DrawOffset) * scale, 0, samples.Length);
+    int end = Math.Clamp((endPx - DrawOffset) * scale, 0, samples.Length);
+    start -= start % channels;
+    end -= end % channels;
+    if (end <= start) return;
+
+    samples = [.. samples[..start], .. samples[end..]];
+  }
+
+  // Draw a translucent overlay over the current selection.
+  public void ShowSelection(Graphics g, int startPx, int endPx) {
+    if (PanDrawSamples is null || endPx <= startPx) return;
+    using Brush brush = new SolidBrush(System.Drawing.Color.FromArgb(35, 65, 55, 135));
+    g.FillRectangle(brush, startPx, 0, endPx - startPx, PanDrawSamples.Height);
+  }
+
   public void AlterTimeScale(float scale) {
   }
 
@@ -225,6 +259,11 @@ public class Track : IDisposable
 
   // play
   public void Play() {
+    if (State == PlaybackState.Paused) {
+      outputDevice.Play();
+      return;
+    }
+
     outputDevice?.Dispose();
     fileReader?.Dispose();
     SaveToTempFile();
@@ -242,9 +281,41 @@ public class Track : IDisposable
     outputDevice?.Play();
   }
   public void Reset() {
+    outputDevice?.Stop();
+    if (fileReader is not null) fileReader.Position = 0;
   }
   public int GetPlayheadPos() {
-    return (int)((outputDevice?.GetPosition() ?? 0) / 4);
+    if (outputDevice is null || fileReader is null) return 0;
+
+    int readerBytesPerValue = fileReader.WaveFormat.BitsPerSample / 8;
+    if (readerBytesPerValue <= 0) return 0;
+
+    long totalValues = fileReader.Length / readerBytesPerValue;
+    if (State == PlaybackState.Stopped && fileReader.Position >= fileReader.Length) {
+      return (int)totalValues;
+    }
+
+    int outputBytesPerValue = outputDevice.OutputWaveFormat.BitsPerSample / 8;
+    if (outputBytesPerValue <= 0) return 0;
+
+    long playedValues = outputDevice.GetPosition() / outputBytesPerValue;
+    return (int)Math.Clamp(playedValues, 0, totalValues);
+  }
+
+  public double GetPlaybackProgress() {
+    double totalSeconds = GetDurationSeconds();
+    if (totalSeconds <= 0) return 0;
+    return Math.Clamp(GetPlaybackSeconds() / totalSeconds, 0, 1);
+  }
+
+  public double GetPlaybackSeconds() {
+    if (outputDevice is null || fileReader is null || SampleValuesPerSecond <= 0) return 0;
+    double seconds = GetPlayheadPos() / (double)SampleValuesPerSecond;
+    return Math.Min(seconds, GetDurationSeconds());
+  }
+
+  public double GetDurationSeconds() {
+    return SampleValuesPerSecond > 0 ? samples.Length / (double)SampleValuesPerSecond : 0;
   }
   public void ToggleDisabled() {
     IsDisabled = !IsDisabled;
@@ -375,3 +446,4 @@ public class Track : IDisposable
         fileReader?.Dispose();
     }
 }
+
