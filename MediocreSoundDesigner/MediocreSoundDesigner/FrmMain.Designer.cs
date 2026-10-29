@@ -118,6 +118,7 @@
             newToolStripMenuItem.Name = "newToolStripMenuItem";
             newToolStripMenuItem.Size = new Size(224, 26);
             newToolStripMenuItem.Text = "New";
+            newToolStripMenuItem.Click += menuFileNewProject_Click;
             // 
             // openToolStripMenuItem
             // 
