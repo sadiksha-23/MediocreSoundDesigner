@@ -16,9 +16,12 @@ public partial class FrmMain : Form
   private int selectionEnd;
   private int firstVisiblePixel;
   private int playheadPixel;
+  private HScrollBar hsbTimeline;
 
-  private sealed class DrawingPanel : Panel {
-    public DrawingPanel() {
+  private sealed class DrawingPanel : Panel
+  {
+    public DrawingPanel()
+    {
       DoubleBuffered = true;
       ResizeRedraw = true;
     }
@@ -56,13 +59,23 @@ public partial class FrmMain : Form
     menuEdit.DropDownItems.Add("Trim to Selection", null, menuEditTrim_Click);
     menuEdit.DropDownItems.Add("Delete Selection", null, menuEditDeleteSel_Click);
 
-    panTimeRuler = new DrawingPanel {
+    panTimeRuler = new DrawingPanel
+    {
       Height = 32,
       BackColor = Color.FromArgb(45, 45, 45),
       ForeColor = Color.Gainsboro
     };
     panTimeRuler.Paint += DrawTimeRuler;
     Controls.Add(panTimeRuler);
+
+    hsbTimeline = new HScrollBar
+    {
+      Minimum = 0,
+      SmallChange = 1,
+      Visible = false
+    };
+    hsbTimeline.Scroll += hsbTimeline_Scroll;
+    Controls.Add(hsbTimeline);
 
     imageList1.ColorDepth = ColorDepth.Depth32Bit;
     imageList1.ImageSize = new Size(30, 30);
@@ -278,41 +291,50 @@ public partial class FrmMain : Form
       newTrack.PanDrawSamples.Invalidate();
     }
   }
-    private void menuFileSave_Click(object sender, EventArgs e) {
-        if (trackManager.Tracks.Count == 0 || trackManager.Tracks.All(t => t.IsDisabled)) {
-            MessageBox.Show("There are no enabled tracks to export.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        sfdSaveFile.Filter = "WAV Audio (*.wav)|*.wav|MP3 Audio (*.mp3)|*.mp3";
-        sfdSaveFile.DefaultExt = "wav";
-        sfdSaveFile.AddExtension = true;
-        if (sfdSaveFile.ShowDialog() != DialogResult.OK) {
-            return;
-        }
-
-        string ext = sfdSaveFile.FilterIndex == 2 ? ".mp3" : ".wav";
-        string path = sfdSaveFile.FileName;
-        string current = Path.GetExtension(path);
-        if (current.Equals(".wav", StringComparison.OrdinalIgnoreCase) || current.Equals(".mp3", StringComparison.OrdinalIgnoreCase)){
-            path = Path.ChangeExtension(path, ext);
-        }
-        else if (!path.EndsWith(ext, StringComparison.OrdinalIgnoreCase)) {
-            path += ext;
-        }
-
-        try {
-            Cursor = Cursors.WaitCursor;
-            trackManager.SaveToFile(path);
-        }
-        catch (Exception ex) {
-            MessageBox.Show($"Could not export the file:\n{ex.Message}", "Export", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-        finally {
-            Cursor = Cursors.Default;
-        }
+  private void menuFileSave_Click(object sender, EventArgs e)
+  {
+    if (trackManager.Tracks.Count == 0 || trackManager.Tracks.All(t => t.IsDisabled))
+    {
+      MessageBox.Show("There are no enabled tracks to export.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Information);
+      return;
     }
-    private void menuFileSettings_Click(object sender, EventArgs e) {
+
+    sfdSaveFile.Filter = "WAV Audio (*.wav)|*.wav|MP3 Audio (*.mp3)|*.mp3";
+    sfdSaveFile.DefaultExt = "wav";
+    sfdSaveFile.AddExtension = true;
+    if (sfdSaveFile.ShowDialog() != DialogResult.OK)
+    {
+      return;
+    }
+
+    string ext = sfdSaveFile.FilterIndex == 2 ? ".mp3" : ".wav";
+    string path = sfdSaveFile.FileName;
+    string current = Path.GetExtension(path);
+    if (current.Equals(".wav", StringComparison.OrdinalIgnoreCase) || current.Equals(".mp3", StringComparison.OrdinalIgnoreCase))
+    {
+      path = Path.ChangeExtension(path, ext);
+    }
+    else if (!path.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+    {
+      path += ext;
+    }
+
+    try
+    {
+      Cursor = Cursors.WaitCursor;
+      trackManager.SaveToFile(path);
+    }
+    catch (Exception ex)
+    {
+      MessageBox.Show($"Could not export the file:\n{ex.Message}", "Export", MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+    finally
+    {
+      Cursor = Cursors.Default;
+    }
+  }
+  private void menuFileSettings_Click(object sender, EventArgs e)
+  {
     FrmEditSettings frm = new();
     frm.SetSound(trackManager.SelectedTrack);
     if (frm.ShowDialog() == DialogResult.OK)
@@ -490,7 +512,10 @@ public partial class FrmMain : Form
     {
       if (item is ToolStripMenuItem menuItem)
       {
-        menuItem.DropDown.ShowImageMargin = false;
+        if (menuItem.DropDown is ToolStripDropDownMenu dropDown)
+        {
+          dropDown.ShowImageMargin = false;
+        }
         HideMenuImageMargins(menuItem.DropDownItems);
       }
     }
@@ -567,27 +592,70 @@ public partial class FrmMain : Form
 
   private void UpdatePlaybackView()
   {
-    if (trackManager is null || panTimeRuler is null) return;
+    if (trackManager is null || panTimeRuler is null || hsbTimeline is null) return;
     bool hasTracks = trackManager.Tracks.Count > 0;
     btnPlay.Enabled = hasTracks;
     buttonReset.Enabled = hasTracks;
-    btnPlay.Visible = hasTracks;
+    btnPlay.Visible = true;
     lblPlayhead.Visible = hasTracks;
-    btnPlay.ImageIndex = playbackTrack?.State == NAudio.Wave.PlaybackState.Playing ? 5 : 4;
-    topButtonTips.SetToolTip(btnPlay, playbackTrack?.State == NAudio.Wave.PlaybackState.Playing ? "Pause" : "Play");
+    bool isPlaying = playbackTrack?.State == NAudio.Wave.PlaybackState.Playing;
+    btnPlay.ImageIndex = isPlaying ? 5 : 4;
+    topButtonTips.SetToolTip(btnPlay, isPlaying ? "Pause" : "Play");
 
+    UpdateTimelineScrollBar();
     if (hasTracks)
     {
       playheadPixel = (playbackTrack?.GetPlayheadPos() ?? 0) / Math.Max(1, trackManager.DrawTimescale);
       int visibleWidth = Math.Max(1, panTracks.ClientSize.Width - 20);
       int oldStart = firstVisiblePixel;
-      if (playheadPixel < visibleWidth || playheadPixel < firstVisiblePixel) firstVisiblePixel = 0;
-      if (playheadPixel >= firstVisiblePixel + visibleWidth) firstVisiblePixel = Math.Max(0, playheadPixel - visibleWidth / 4);
+
+      // Follow playback automatically, but let the user scroll freely while paused or stopped.
+      if (isPlaying)
+      {
+        if (playheadPixel < visibleWidth) firstVisiblePixel = 0;
+        else if (playheadPixel >= firstVisiblePixel + visibleWidth)
+          firstVisiblePixel = Math.Max(0, playheadPixel - visibleWidth / 4);
+      }
+
+      UpdateTimelineScrollBar();
       if (oldStart != firstVisiblePixel) trackManager.RedrawAll();
       lblPlayhead.Left = playheadPixel - firstVisiblePixel;
       lblPlayhead.BringToFront();
     }
     panTimeRuler.Invalidate();
+  }
+
+  private void hsbTimeline_Scroll(object sender, ScrollEventArgs e)
+  {
+    firstVisiblePixel = hsbTimeline.Value;
+    trackManager.RedrawAll();
+    panTimeRuler.Invalidate();
+    UpdatePlaybackView();
+  }
+
+  private void UpdateTimelineScrollBar()
+  {
+    if (hsbTimeline is null || trackManager is null || panTracks is null) return;
+
+    int visibleWidth = Math.Max(1, panTracks.ClientSize.Width);
+    int scale = Math.Max(1, trackManager.DrawTimescale);
+    int contentWidth = 0;
+
+    foreach (Track track in trackManager.Tracks)
+    {
+      int trackWidth = track.DrawOffset +
+        (int)Math.Ceiling(track.GetDurationSeconds() * track.SampleValuesPerSecond / scale);
+      contentWidth = Math.Max(contentWidth, trackWidth);
+    }
+
+    int maxScroll = Math.Max(0, contentWidth - visibleWidth);
+    hsbTimeline.LargeChange = visibleWidth;
+    hsbTimeline.SmallChange = Math.Max(1, visibleWidth / 20);
+    hsbTimeline.Maximum = maxScroll + visibleWidth - 1;
+    hsbTimeline.Visible = maxScroll > 0;
+
+    firstVisiblePixel = Math.Clamp(firstVisiblePixel, 0, maxScroll);
+    hsbTimeline.Value = firstVisiblePixel;
   }
 
   private void RebuildTrackPanels()
@@ -617,8 +685,11 @@ public partial class FrmMain : Form
     int rulerTop = trkDrawTimescale.Bottom + 4;
     panTimeRuler.SetBounds(padding, rulerTop, contentWidth, 32 * DeviceDpi / 96);
     int tracksTop = panTimeRuler.Bottom + 4;
-    int tracksBottom = buttonDrums.Top - 35;
+    int scrollHeight = SystemInformation.HorizontalScrollBarHeight;
+    int tracksBottom = buttonDrums.Top - 35 - scrollHeight;
     panTracks.SetBounds(padding, tracksTop, contentWidth, Math.Max(1, tracksBottom - tracksTop));
+    hsbTimeline.SetBounds(padding, panTracks.Bottom, contentWidth, scrollHeight);
+    hsbTimeline.BringToFront();
 
     int count = trackManager.Tracks.Count;
     for (int i = 0; i < count; i++)
