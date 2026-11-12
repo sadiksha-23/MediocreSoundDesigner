@@ -21,6 +21,8 @@ public partial class FrmMain : Form
   private System.Windows.Forms.Timer zoomSettleTimer;
   private HScrollBar hsbTimeline;
 
+    private bool hasUnsavedChanges;
+
 
   // Use the existing generator heading.
   private TextBox lbInstPanel => lbGeneratorPanel;
@@ -269,6 +271,8 @@ public partial class FrmMain : Form
 
   private void SetTheme(bool dark)
   {
+        Settings.Color.WinBg = Color.FromArgb(25, 25, 25);
+        Settings.Color.WinBg = Color.FromArgb(240, 240, 240);
         Settings.Color.WinBg = dark ? Color.FromArgb(25, 25, 25) : Color.FromArgb(240, 240, 240);
         Settings.Color.WinFg = dark ? Color.White : Color.Black;
         Settings.Color.TrackBg_Unselected = dark ? Color.FromArgb(60, 60, 60) : Color.White;
@@ -312,6 +316,7 @@ public partial class FrmMain : Form
       if (keyData == Keys.Left || keyData == Keys.Right)
       {
         selected.ShiftSampleOver(keyData == Keys.Left ? -5 : 5);
+        hasUnsavedChanges = true;
         selected.PanDrawSamples.Invalidate();
         return true;
       }
@@ -330,7 +335,7 @@ public partial class FrmMain : Form
   {
         base.OnFormClosing(e);
 
-        if (trackManager is null || trackManager.Tracks.Count == 0)
+        if (trackManager is null || !hasUnsavedChanges)
             return;
 
         DialogResult choice = MessageBox.Show(this, "Do you want to save the project before closing?", "Save project", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
@@ -373,6 +378,7 @@ public partial class FrmMain : Form
     {
       trackManager.SaveProject(path);
       currentProjectPath = path;
+      hasUnsavedChanges = false;
       return true;
     }
     catch (Exception ex)
@@ -389,7 +395,7 @@ public partial class FrmMain : Form
 
   private bool ConfirmSaveBeforeReplacingProject()
   {
-    if (trackManager.Tracks.Count == 0) return true;
+    if (!hasUnsavedChanges) return true;
 
     DialogResult choice = MessageBox.Show(
       this,
@@ -672,6 +678,7 @@ public partial class FrmMain : Form
     pan.DoubleClick += (sender, e) =>
     {
       track.ToggleDisabled();
+      hasUnsavedChanges = true;
       pan.Invalidate();
     };
     pan.Paint += (sender, e) =>
@@ -708,6 +715,7 @@ public partial class FrmMain : Form
     panTracks.Controls.Add(pan);
     track.LinkPanels(pan, panTracks);
     SelectTrack(track);
+        hasUnsavedChanges = true;
     return pan;
   }
 
@@ -752,6 +760,7 @@ public partial class FrmMain : Form
 
   private void RemoveTrack(Track track)
   {
+    hasUnsavedChanges = true;
     if (track is null) return;
     trackManager.ResetAll();
     playbackTrack = null;
@@ -1033,7 +1042,7 @@ public partial class FrmMain : Form
   private void buttonSynth_Click(object sender, EventArgs e)
   {
     using FrmGenerateSynth dialog = new();
-
+        FrmEditMaster.StyleDialog(dialog);
     if (dialog.ShowDialog(this) != DialogResult.OK)
       return;
 
@@ -1082,6 +1091,7 @@ public partial class FrmMain : Form
   private void buttonGuitar_Click(object sender, EventArgs e)
   {
     using FrmGeneratePluck dialog = new();
+        FrmEditMaster.StyleDialog(dialog);
 
     if (dialog.ShowDialog(this) != DialogResult.OK)
       return;
@@ -1127,6 +1137,7 @@ public partial class FrmMain : Form
   private void buttonPiano_Click(object sender, EventArgs e)
   {
     using FrmGenerateChord dialog = new();
+        FrmEditMaster.StyleDialog(dialog);
 
     if (dialog.ShowDialog(this) != DialogResult.OK)
       return;
@@ -1171,6 +1182,7 @@ public partial class FrmMain : Form
   private void buttonDrums_Click(object sender, EventArgs e)
   {
     using FrmGenerateBeat dialog = new();
+        FrmEditMaster.StyleDialog(dialog);
 
     if (dialog.ShowDialog(this) != DialogResult.OK)
       return;
@@ -1255,6 +1267,7 @@ public partial class FrmMain : Form
       trackManager.LoadProject(dialog.FileName);
       RebuildTrackPanels();
       currentProjectPath = dialog.FileName;
+      hasUnsavedChanges = false;
     }
     catch (Exception ex)
     {
@@ -1270,6 +1283,7 @@ public partial class FrmMain : Form
     firstVisiblePixel = 0;
     trackManager.NewProject();
     currentProjectPath = null;
+    hasUnsavedChanges = false;
     UpdateSizes();
   }
 }
