@@ -271,8 +271,8 @@ public partial class FrmMain : Form
 
   private void SetTheme(bool dark)
   {
-        Settings.Color.WinBg = Color.FromArgb(25, 25, 25);
-        Settings.Color.WinBg = Color.FromArgb(240, 240, 240);
+        //Settings.Color.WinBg = Color.FromArgb(25, 25, 25);
+        //Settings.Color.WinBg = Color.FromArgb(240, 240, 240);
         Settings.Color.WinBg = dark ? Color.FromArgb(25, 25, 25) : Color.FromArgb(240, 240, 240);
         Settings.Color.WinFg = dark ? Color.White : Color.Black;
         Settings.Color.TrackBg_Unselected = dark ? Color.FromArgb(60, 60, 60) : Color.White;
