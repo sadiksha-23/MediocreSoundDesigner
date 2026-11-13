@@ -15,3 +15,14 @@ Mediocre Sound Designer is a Windows desktop application for working with audio 
 - Save, open, and create projects.
 - Export audio as WAV or MP3.
 - Switch between dark and light themes.# MediocreSoundDesigner
+
+## Setup
+
+1. Install Visual Studio with the **.NET desktop development** workload.
+2. Clone this repository:
+   ```bash
+   git clone https://github.com/sadiksha-23/MediocreSoundDesigner.git
+
+## User Guide
+
+See [USER_GUIDE.md](USER_GUIDE.md) for instructions on importing audio, editing tracks, using generators and effects, and saving or exporting projects.
