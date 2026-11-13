@@ -249,6 +249,7 @@ public partial class FrmMain : Form
     tmrUpdate.Interval = 30;
     UpdateSizes();
     ApplySettings();
+        SetTheme(true);
   }
 
   private static Image GetButtonIcon(Button button)
