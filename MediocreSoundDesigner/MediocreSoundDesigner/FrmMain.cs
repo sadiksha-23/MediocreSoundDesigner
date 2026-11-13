@@ -100,8 +100,8 @@ public partial class FrmMain : Form
     //menuEffects.DropDownItems.Add("Undo Effect", null, (s, e) => UndoEffectOnTrack());
     //menuEdit.DropDownItems.Add(menuEffects);   // shows up as Edit > Effects
     ToolStripMenuItem menuEffects = new("Voice Tools");
-    menuEffects.DropDownItems.Add("Voice Only (quiet the music)", null, (s, e) => ApplyEffectToTrack("VoiceOnly"));
-    menuEffects.DropDownItems.Add("Remove Voice (karaoke)", null, (s, e) => ApplyEffectToTrack("RemoveVoice"));
+    //menuEffects.DropDownItems.Add("Voice Only (quiet the music)", null, (s, e) => ApplyEffectToTrack("VoiceOnly"));
+    //menuEffects.DropDownItems.Add("Remove Voice (karaoke)", null, (s, e) => ApplyEffectToTrack("RemoveVoice"));
     menuEffects.DropDownItems.Add("Deeper Voice", null, (s, e) => ApplyEffectToTrack("Deep"));
     menuEffects.DropDownItems.Add("Higher Voice", null, (s, e) => ApplyEffectToTrack("Chipmunk"));
     menuEffects.DropDownItems.Add("Undo Effect", null, (s, e) => UndoEffectOnTrack());

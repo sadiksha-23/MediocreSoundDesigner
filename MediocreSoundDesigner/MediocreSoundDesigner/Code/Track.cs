@@ -197,12 +197,14 @@ public class Track : IDisposable
   }
 
 
-
+  
 	// effect = "Deep", "Chipmunk", "VoiceOnly" or "RemoveVoice"
 	public void ApplyEffect(string effect)
 	{
 		int rate = sampleRate > 0 ? sampleRate : Format.SampleRate;
 		int ch = channels > 0 ? channels : Format.Channels;
+       // if (effect == "VoiceOnly" && !CheckStereo(samples, ch, false)) return;
+       // if (effect == "RemoveVoice" && !CheckStereo(samples, ch, true)) return;
 
 		samplesBeforeEffect = CloneSamples();      // save the old sound so Undo works
 		float[] result = CloneSamples();           // work on a copy
@@ -218,11 +220,14 @@ public class Track : IDisposable
 			case "Chipmunk":
 				result = ChangePitch(result, rate, ch, 1.5f);     // higher voice
 				break;
-
+			/*
 			case "VoiceOnly":
 				result = KeepVoiceOnly(result, rate, ch);         // quiet the music
 				break;
-
+            */
+            
+				
+   
             case "FadeIn":
                 {
                     int totalFames = result.Length / ch;
@@ -252,7 +257,7 @@ public class Track : IDisposable
                     }
                     break;
                 }
-                
+            /*
 			case "RemoveVoice":
                 if (ch != 2)                                      // needs left + right channels
                 {
@@ -274,11 +279,19 @@ public class Track : IDisposable
                     result[i + 1] = difference;
                 }
                 break;
+            */
+            
+            //case "RemoveVoice":
+             //   result = RemoveVoiceFromSong(result, rate, ch);
+              //  break;
+ 
+                
 				
 		}
 
 		samples = result;
 	}
+    
 
 	// Changes the pitch with NAudio's built-in pitch shifter.
 	// pitch 1.0 = same, below 1 = deeper, above 1 = higher. The length stays the same.
@@ -303,46 +316,28 @@ public class Track : IDisposable
 		return output;
 	}
 
-	// Keeps the human voice and quiets the music (a rough method, not AI).
-	private float[] KeepVoiceOnly(float[] input, int rate, int ch)
+	private bool CheckStereo(float[] input, int ch, bool needDifference)
 	{
-		float[] output = new float[input.Length];
-
-		// STEP 1: singers are usually mixed in the CENTER, so left and right both contain the voice.
-		// Averaging the channels keeps the center and weakens sounds placed at the sides.
-		for (int i = 0; i + ch - 1 < input.Length; i += ch)
+		if (ch != 2)
 		{
-			float sum = 0;
-			for (int c = 0; c < ch; c++)
-				sum += input[i + c];
-
-			float middle = sum / ch;
-			for (int c = 0; c < ch; c++)
-				output[i + c] = middle;
+			MessageBox.Show("This effect needs a stereo track (left + right).");
+			return false;
 		}
-
-		// STEP 2: speech mostly lives between 200 Hz and 4000 Hz.
-		// Cut the deep bass below it and the sharp cymbals above it.
-		var highPass = new NAudio.Dsp.BiQuadFilter[ch];
-		var lowPass = new NAudio.Dsp.BiQuadFilter[ch];
-		for (int c = 0; c < ch; c++)
+		if (needDifference)
 		{
-			highPass[c] = NAudio.Dsp.BiQuadFilter.HighPassFilter(rate, 200, 1);
-			lowPass[c] = NAudio.Dsp.BiQuadFilter.LowPassFilter(rate, 4000, 1);
+			float biggest = 0;
+			for (int i = 0; i + 1 < input.Length; i += 2)
+				biggest = Math.Max(biggest, Math.Abs(input[i] - input[i + 1]));
+
+			if (biggest < 0.01f)
+			{
+				MessageBox.Show("Left and right are identical on this track, so the voice can't be separated.");
+				return false;
+			}
 		}
-		for (int i = 0; i < output.Length; i++)
-			output[i] = lowPass[i % ch].Transform(highPass[i % ch].Transform(output[i]));
-
-		// STEP 3: filtering made it quieter, so scale it back up (loudest sample = 0.9)
-		float peak = 0;
-		foreach (float s in output)
-			peak = Math.Max(peak, Math.Abs(s));
-		if (peak > 0)
-			for (int i = 0; i < output.Length; i++)
-				output[i] = output[i] / peak * 0.9f;
-
-		return output;
+		return true;
 	}
+
 
 	public bool CanUndoEffect => samplesBeforeEffect != null;
 
